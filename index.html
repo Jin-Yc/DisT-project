@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DisT · Overview</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<div class="brand">DisT<small>PRODUCT READINESS PLATFORM</small>
+</div>
+<p class="nav-label">WORKSPACE</p>
+<nav class="nav">
+<a class="active" href="index.html">
+<span class="icon">▦</span>Overview</a>
+<a href="projects.html">
+<span class="icon">□</span>Projects</a>
+<a href="actions.html">
+<span class="icon">✓</span>My actions</a>
+</nav>
+<p class="nav-label">TOOLS</p>
+<nav class="nav">
+<a href="project.html">
+<span class="icon">✦</span>Product Readiness</a>
+<a href="prd-review.html">
+<span class="icon">⌕</span>PRD Review</a>
+</nav>
+<div class="sidebar-note">
+<b>Demo workspace</b>
+<br>本地规则与模拟 AI；所有结论均需人工确认。</div>
+<div class="user-menu">
+<div class="user-profile">
+<span class="avatar">D</span>
+<div>
+<b>DisT</b>
+<small>产品工作台</small>
+</div>
+</div>
+<a href="actions.html">我的待办</a>
+<a href="settings.html">工作台设置</a>
+</div>
+</aside>
+<div class="page">
+<header class="topbar">
+<div class="crumb">
+<b>NIQ Product Workspace</b> / Overview</div>
+</header>
+<main class="content">
+<div class="page-head">
+<div>
+<p class="eyebrow">Portfolio overview</p>
+<h1>项目组合总览</h1>
+<p class="subtitle">查看你参与的产品项目、当前阶段，以及需要优先处理的准备度风险。</p>
+</div>
+<a class="button" href="new-project.html">+ 新建产品方案</a>
+</div>
+<section class="metrics">
+<div class="metric">
+<span>进行中的项目</span>
+<strong>6</strong>
+<small>2 个本周有阶段变化</small>
+</div>
+<div class="metric">
+<span>需要处理的阻塞项</span>
+<strong>4</strong>
+<small>↑ 1 个需要本周确认</small>
+</div>
+<div class="metric">
+<span>本周待办</span>
+<strong>8</strong>
+<small>3 项由你负责</small>
+</div>
+<div class="metric">
+<span>准备进入评审</span>
+<strong>2</strong>
+<small>等待材料确认</small>
+</div>
+</section>
+<div class="dashboard">
+<section class="card">
+<div class="card-head">
+<div>
+<h2>项目甘特图</h2>
+<p>以日期为横轴：横条表示任务起止日期，深色部分显示已完成进度，菱形表示关键里程碑。</p>
+</div>
+<span class="tag blue">Today · 7/30</span>
+</div>
+<div class="gantt" aria-label="2026 年 7 月至 9 月的项目排期">
+<div class="gantt-header"><span>项目 / 工作项</span><span>7/14</span><span>7/21</span><span>7/28</span><span class="today-label">8/04</span><span>8/11</span><span>8/18</span><span>8/25</span><span>9/01</span></div>
+<div class="gantt-row"><div class="gantt-name"><b>市场洞察周报</b><small>新产品 · DisT</small></div><div class="gantt-track"><i class="today-line"></i><span class="gantt-bar launch" style="left:3%;width:40%"><em style="width:72%"></em>产品定位</span><span class="gantt-milestone" style="left:44%" title="评审材料截止"></span><span class="gantt-bar review" style="left:48%;width:26%"><em style="width:28%"></em>评审准备</span></div></div>
+<div class="gantt-row"><div class="gantt-name"><b>门店表现 API 迭代</b><small>迭代 · Wei</small></div><div class="gantt-track"><i class="today-line"></i><span class="gantt-bar scope" style="left:18%;width:31%"><em style="width:88%"></em>Scope 定义</span><span class="gantt-milestone" style="left:51%" title="PRD Review"></span><span class="gantt-bar delivery" style="left:55%;width:37%"><em style="width:12%"></em>开发准备</span></div></div>
+<div class="gantt-row"><div class="gantt-name"><b>品类机会雷达</b><small>新产品 · Alice</small></div><div class="gantt-track"><i class="today-line"></i><span class="gantt-bar launch" style="left:6%;width:32%"><em style="width:56%"></em>客户访谈</span><span class="gantt-bar scope" style="left:42%;width:33%"><em style="width:0%"></em>方案探索</span><span class="gantt-milestone" style="left:77%" title="方案评审"></span></div></div>
+</div>
+<div class="legend">
+<span>
+<i style="background:#3658df">
+</i>产品定位</span>
+<span>
+<i style="background:#7c3aed">
+</i>范围定义</span>
+<span>
+<i style="background:#b45309">
+</i>评审</span>
+<span>
+<i style="background:#087f5b">
+</i>交付准备</span>
+<span><i style="background:#f59e0b;transform:rotate(45deg);border-radius:0"></i>里程碑</span>
+</div>
+</section>
+<aside class="side-stack">
+<section class="card">
+<div class="card-head">
+<div>
+<h2>需要关注</h2>
+<p>按影响优先级排序</p>
+</div>
+</div>
+<div class="risk">
+<i class="risk-dot high">
+</i>
+<div>
+<b>市场洞察周报：数据覆盖未确认</b>
+<span>影响：不能确定首发市场与品类</span>
+</div>
+</div>
+<div class="risk">
+<i class="risk-dot high">
+</i>
+<div>
+<b>门店表现 API：验收标准缺失</b>
+<span>影响：PRD 暂不能进入评审</span>
+</div>
+</div>
+<div class="risk">
+<i class="risk-dot">
+</i>
+<div>
+<b>品类机会雷达：访谈证据不足</b>
+<span>建议：先完成 3 位客户访谈</span>
+</div>
+</div>
+</section>
+<section class="card" id="actions">
+<div class="card-head">
+<div>
+<h2>我的下一步</h2>
+<p>本周优先处理</p>
+</div>
+</div>
+<div class="todo">
+<i class="checkbox">
+</i>
+<div>
+<b>确认市场洞察周报首发范围</b>
+<span>今天 · 与数据团队</span>
+</div>
+</div>
+<div class="todo">
+<i class="checkbox">
+</i>
+<div>
+<b>审阅门店表现 API 的 PRD</b>
+<span>明天 · 评审前</span>
+</div>
+</div>
+<div class="todo">
+<i class="checkbox">
+</i>
+<div>
+<b>补充品类机会雷达客户证据</b>
+<span>周五 · 商业团队</span>
+</div>
+</div>
+</section>
+</aside>
+</div>
+<section class="card" id="projects" style="margin-top:20px">
+<div class="card-head">
+<div>
+<h2>项目列表</h2>
+<p>从项目进入详情，使用对应阶段的工作流工具。</p>
+</div>
+<a class="text-link" href="project.html">查看全部 →</a>
+</div>
+<table class="project-table">
+<thead>
+<tr>
+<th>项目</th>
+<th>类型</th>
+<th>当前阶段</th>
+<th>准备度</th>
+<th>下一步</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="project.html">市场洞察周报</a>
+</td>
+<td>新产品 Launch</td>
+<td>
+<span class="tag amber">准备评审</span>
+</td>
+<td>
+<span class="tag red">2 个阻塞项</span>
+</td>
+<td>确认数据覆盖</td>
+</tr>
+<tr>
+<td>
+<a href="project.html">门店表现 API 迭代</a>
+</td>
+<td>现有产品迭代</td>
+<td>
+<span class="tag blue">Scope 定义</span>
+</td>
+<td>
+<span class="tag amber">需澄清</span>
+</td>
+<td>运行 PRD Review</td>
+</tr>
+<tr>
+<td>
+<a href="project.html">品类机会雷达</a>
+</td>
+<td>新产品 Launch</td>
+<td>
+<span class="tag blue">问题定义</span>
+</td>
+<td>
+<span class="tag green">持续收集</span>
+</td>
+<td>完成客户访谈</td>
+</tr>
+</tbody>
+</table>
+</section>
+</main>
+</div>
+</div>
+<script src="assets/app.js"></script>
+</body>
+</html>

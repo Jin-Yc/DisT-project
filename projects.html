@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DisT · Projects</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<div class="brand">DisT<small>PRODUCT READINESS PLATFORM</small>
+</div>
+<p class="nav-label">WORKSPACE</p>
+<nav class="nav">
+<a href="index.html">
+<span class="icon">▦</span>Overview</a>
+<a class="active" href="projects.html">
+<span class="icon">□</span>Projects</a>
+<a href="actions.html">
+<span class="icon">✓</span>My actions</a>
+</nav>
+<p class="nav-label">TOOLS</p>
+<nav class="nav">
+<a href="project.html">
+<span class="icon">✦</span>Product Readiness</a>
+<a href="prd-review.html">
+<span class="icon">⌕</span>PRD Review</a>
+</nav>
+<div class="user-menu">
+<div class="user-profile">
+<span class="avatar">D</span>
+<div>
+<b>DisT</b>
+<small>产品工作台</small>
+</div>
+</div>
+<a href="actions.html">我的待办</a>
+<a href="settings.html">工作台设置</a>
+</div>
+</aside>
+<div class="page">
+<header class="topbar">
+<div class="crumb">
+<b>NIQ Product Workspace</b> / Projects</div>
+</header>
+<main class="content">
+<div class="page-head">
+<div>
+<p class="eyebrow">Project library</p>
+<h1>所有项目</h1>
+<p class="subtitle">通过项目阶段和准备度找到需要推进或评审的工作。</p>
+</div>
+<a class="button" href="new-project.html">+ 新建产品方案</a>
+</div>
+<section class="card">
+<div class="filter-bar">
+<select id="project-stage" aria-label="项目状态">
+<option value="">全部状态</option>
+<option>准备评审</option>
+<option>Scope 定义</option>
+<option>问题定义</option>
+</select>
+<select id="project-type" aria-label="项目类型">
+<option value="">全部类型</option>
+<option>新产品 Launch</option>
+<option>现有产品迭代</option>
+</select>
+<input id="project-search" aria-label="搜索项目" placeholder="搜索项目名称">
+</div>
+<table class="project-table">
+<thead>
+<tr>
+<th>项目</th>
+<th>负责人</th>
+<th>类型</th>
+<th>当前阶段</th>
+<th>准备度</th>
+<th>下一步</th>
+</tr>
+</thead>
+<tbody>
+<tr data-stage="准备评审" data-type="新产品 Launch">
+<td>
+<a href="project.html">市场洞察周报</a>
+</td>
+<td>DisT</td>
+<td>新产品 Launch</td>
+<td>
+<span class="tag amber">准备评审</span>
+</td>
+<td>
+<span class="tag red">2 个阻塞项</span>
+</td>
+<td>确认数据覆盖</td>
+</tr>
+<tr data-stage="Scope 定义" data-type="现有产品迭代">
+<td>
+<a href="project.html">门店表现 API 迭代</a>
+</td>
+<td>Wei</td>
+<td>现有产品迭代</td>
+<td>
+<span class="tag blue">Scope 定义</span>
+</td>
+<td>
+<span class="tag amber">需澄清</span>
+</td>
+<td>运行 PRD Review</td>
+</tr>
+<tr data-stage="问题定义" data-type="新产品 Launch">
+<td>
+<a href="project.html">品类机会雷达</a>
+</td>
+<td>Alice</td>
+<td>新产品 Launch</td>
+<td>
+<span class="tag blue">问题定义</span>
+</td>
+<td>
+<span class="tag green">持续收集</span>
+</td>
+<td>完成客户访谈</td>
+</tr>
+</tbody>
+</table>
+</section>
+</main>
+</div>
+</div>
+<script src="assets/app.js">
+</script>
+</body>
+</html>

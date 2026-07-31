@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DisT · PRD Review</title><link rel="stylesheet" href="assets/app.css"></head>
+<body><div class="shell">
+<aside class="sidebar"><div class="brand">DisT<small>PRODUCT READINESS PLATFORM</small></div>
+<p class="nav-label">WORKSPACE</p><nav class="nav"><a href="index.html"><span class="icon">▦</span>Overview</a><a href="projects.html"><span class="icon">□</span>Projects</a><a href="actions.html"><span class="icon">✓</span>My actions</a></nav>
+<p class="nav-label">PROJECT TOOLS</p><nav class="nav"><a href="project.html"><span class="icon">✦</span>Product Readiness</a><a class="active" href="prd-review.html"><span class="icon">⌕</span>PRD Review</a></nav>
+<div class="sidebar-note"><b>市场洞察周报</b><br>新产品 Launch<br><span class="tag amber" style="margin-top:8px">准备评审</span></div>
+<div class="user-menu"><div class="user-profile"><span class="avatar">D</span><div><b>DisT</b><small>产品工作台</small></div></div><a href="actions.html">我的待办</a><a href="settings.html">工作台设置</a></div></aside>
+<div class="page"><header class="topbar"><div class="crumb"><a href="index.html" style="color:inherit">Overview</a> / Projects / 市场洞察周报 / <b>PRD Review</b></div></header>
+<main class="content"><section class="detail-head"><p class="eyebrow">PRJ-024 · Review gate</p><h1>PRD Review</h1><p class="subtitle">市场洞察周报 · 在正式评审前检查材料是否完整、可验证且具备清晰边界。</p><div class="detail-meta"><span class="tag amber">准备评审</span><span class="tag red">2 个阻塞项</span><span class="tag blue">Owner · DisT</span></div></section>
+<section class="tool-banner"><span class="avatar">⌕</span><div><strong>当前工具：PRD Review</strong><span>用于已有产品说明或 PRD 草稿，定位评审缺口、范围风险和下一步行动。</span></div><a class="button secondary" href="project.html">返回 Product Readiness</a></section>
+<div class="tool-layout"><div><div class="tool-info"><div><b>适用阶段</b><span>已有 PRD 或方案草稿之后</span></div><div><b>你提供</b><span>产品说明或评审材料</span></div><div><b>你得到</b><span>缺口、范围风险和行动清单</span></div></div>
+<section class="card"><label class="input-label" for="review-text">待评审产品说明</label><textarea class="review-area" id="review-text">产品名称：市场洞察周报
+
+我们计划为快消品牌提供每周更新的市场数据看板，帮助客户更快了解市场变化。目标客户是品牌客户，首发版本提供销售趋势、品类排名和异常提醒。
+
+产品将使用现有零售数据，预计 10 月上线。成功后会逐步扩展到更多国家和品类。产品团队负责需求，数据团队负责数据准备。</textarea><button class="button" id="review-run" type="button">开始评审检查</button></section></div>
+<aside class="card"><h2>Review Brief</h2><div class="empty" id="review-empty">点击“开始评审检查”<br>查看哪些信息可以进入评审，哪些仍需补全。</div><div class="review-output" id="review-output"><div class="score"><strong id="review-score">0/6</strong><span>核心维度已有基本信息<br>不足时不建议直接进入执行评估</span></div><div class="check-list" id="review-items"></div></div></aside></div>
+</main></div></div><script src="assets/app.js"></script></body></html>

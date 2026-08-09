@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DisT · 产品演示</title>
+<style>
+:root{color-scheme:light;--ink:#1d1d1f;--muted:#6e6e73;--blue:#0a63d8}*{box-sizing:border-box}body{margin:0;overflow:hidden;background:radial-gradient(circle at 72% 0,#d9ecff,transparent 34%),#f5f5f7;color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif}.demo{display:grid;grid-template-rows:auto auto 1fr;height:100vh;padding:22px 28px 26px}.demo-head{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0 2px 12px}.brand{font-size:22px;font-weight:750;letter-spacing:-.04em}.brand small{margin-left:10px;color:var(--muted);font-size:11px;font-weight:650;letter-spacing:.1em}.scene-count{color:var(--muted);font-size:13px}.frame-wrap{grid-row:3;position:relative;min-height:0;overflow:hidden;border:1px solid rgba(60,60,67,.17);border-radius:22px;background:#fff;box-shadow:0 24px 60px rgba(28,28,32,.16),0 2px 5px rgba(28,28,32,.08)}iframe{width:100%;height:100%;border:0;background:#fff}.caption{grid-row:2;display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;margin:0 auto 14px;width:min(980px,100%);padding:12px 18px;border:1px solid rgba(60,60,67,.13);border-radius:16px;background:rgba(255,255,255,.84);box-shadow:0 8px 24px rgba(28,28,32,.08);backdrop-filter:blur(16px)}.number{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;background:#eaf3ff;color:var(--blue);font-weight:800}.caption b,.caption span{display:block}.caption b{font-size:15px}.caption span{margin-top:1px;color:var(--muted);font-size:13px}.progress{position:absolute;top:0;left:0;height:4px;background:linear-gradient(90deg,#0a63d8,#5ba9ff);transition:width .15s linear}@media(max-width:700px){.demo{padding:12px}.demo-head{padding-bottom:10px}.brand small{display:none}.frame-wrap{border-radius:14px}.caption{margin-bottom:10px;padding:11px 13px;border-radius:12px}.caption span{font-size:12px}}
+</style>
+</head>
+<body><main class="demo"><header class="demo-head"><div class="brand">DisT <small>PRODUCT READINESS PLATFORM</small></div><div class="scene-count" id="scene-count">演示 1 / 4</div></header><div class="frame-wrap"><i class="progress" id="progress"></i><iframe id="demo-frame" title="DisT 产品演示"></iframe></div><footer class="caption"><div class="number" id="scene-number">1</div><div><b id="scene-title">一个入口，管理多种项目状态</b><span id="scene-text">从项目组合快速区分可操作的新产品项目与正在迭代的存量项目。</span></div></footer></main>
+<script>
+const scenes=[
+ {role:'PL',url:'index.html',title:'一个入口，管理多种项目状态',text:'O2O 是可操作的新产品流程；RI 与 Ecom 是处于迭代中的只读项目快照。',duration:14000},
+ {role:'PL',url:'project-view.html?project=ecom',title:'存量项目不重复走立项流程',text:'Ecom 直接展示本轮迭代目标、范围、风险与跨团队排期，便于快速掌握上下文。',duration:8500},
+ {role:'PL',url:'workflow.html#review',title:'PL 推动关键协作节点',text:'PL 确认 Draft Spec、处理团队 Issue、确认评审结论，并在可行性确认后分发任务。',duration:11000},
+ {role:'Dsci',url:'role-workflow.html',title:'团队在同一项目中完成自己的工作',text:'团队查看只读 Draft Spec，提交 Issue、评审结论和交付结果；关键结论均由 PL 确认。',duration:9500}
+];
+let index=0,timer,started=Date.now();const frame=document.querySelector('#demo-frame');
+function showScene(next){index=next%scenes.length;const s=scenes[index];localStorage.setItem('dist-role',s.role);frame.src=s.url;document.querySelector('#scene-number').textContent=index+1;document.querySelector('#scene-count').textContent=`演示 ${index+1} / ${scenes.length}`;document.querySelector('#scene-title').textContent=s.title;document.querySelector('#scene-text').textContent=s.text;started=Date.now();clearTimeout(timer);timer=setTimeout(()=>showScene(index+1),s.duration)}
+function tick(){const s=scenes[index];document.querySelector('#progress').style.width=`${Math.min(100,(Date.now()-started)/s.duration*100)}%`;requestAnimationFrame(tick)}showScene(0);tick();
+</script></body></html>

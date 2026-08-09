@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DisT · PL 工作流</title>
+<link rel="stylesheet" href="assets/app.css"><link rel="stylesheet" href="assets/ui-polish.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<div class="brand">DisT<small>PRODUCT READINESS PLATFORM</small></div>
+<p class="nav-label">WORKSPACE</p>
+<nav class="nav">
+<a href="index.html"><span class="icon">▦</span>Overview</a>
+<a class="active" href="workflow.html"><span class="icon">✦</span>PL 工作流</a>
+</nav>
+<div class="sidebar-note"><b id="sidebar-project-name">O2O</b><br>PRJ-O2O · 新产品 Launch<br><span class="tag amber" id="sidebar-stage" style="margin-top:8px">需求澄清中</span></div>
+<div class="user-menu">
+<div class="user-profile"><span class="avatar" id="role-avatar">PL</span><div><b id="role-name">PL</b><small>当前角色</small></div></div>
+<label class="role-picker" for="role-select">切换角色
+<select id="role-select"><option value="PL">PL</option><option value="Dsci">Dsci</option><option value="DA & RV">DA &amp; RV</option><option value="Ops">Ops</option></select>
+</label>
+</div>
+</aside>
+<div class="page">
+<header class="topbar"><div class="crumb"><a href="index.html" style="color:inherit">Overview</a> / <b>PL 工作流</b></div><span class="tag blue">PL</span></header>
+<main class="content" id="workflow-app">
+<section class="detail-head">
+<p class="eyebrow">PRJ-O2O · PL workspace</p>
+<h1 id="workflow-project-name">O2O</h1>
+<p class="subtitle">你将把 O2O 从需求想法推进到确认的 Product Spec、项目计划与一期开发任务。每一步完成后，平台会明确告诉你下一步要做什么。</p>
+<div class="detail-meta"><span class="tag amber" id="workflow-status">需求澄清中</span><span class="tag blue">Owner · PL</span><span class="tag red" id="issue-count">1 个待处理问题</span></div>
+<p class="workflow-feedback" id="workflow-feedback" aria-live="polite"></p>
+</section>
+
+<section class="workflow-layout">
+<aside class="workflow-steps" aria-label="PL 流程步骤">
+<button class="flow-step active" data-panel="clarify"><b>1</b><span>需求澄清<small>明确客户、问题与范围</small></span></button>
+<button class="flow-step" data-panel="draft"><b>2</b><span>Draft Product Spec<small>审阅并确认草案</small></span></button>
+<button class="flow-step" data-panel="review"><b>3</b><span>团队评审<small>Issue Log / Ready Check</small></span></button>
+<button class="flow-step" data-panel="minutes"><b>4</b><span>会议纪要回写<small>可行性评审</small></span></button>
+<button class="flow-step" data-panel="plan"><b>5</b><span>排期与任务分发<small>Project Plan</small></span></button>
+</aside>
+
+<div class="workflow-panels">
+<section class="workflow-panel active" id="clarify">
+<div class="tool-banner"><span class="avatar">AI</span><div><strong>需求澄清</strong><span>AI 以产品咨询专家身份，逐步追问客户、问题、价值和范围。</span></div><span class="tag blue">模拟 AI</span></div>
+<div class="conversation-layout">
+<section class="card conversation-card">
+<div class="chat-log" id="chat-log">
+<div class="message ai"><span class="avatar">AI</span><div><b>先从核心决策开始。</b><p>谁会在什么决策中使用这个产品？请描述当前如何完成该决策。</p></div></div>
+<div class="message user"><span class="avatar">PL</span><div><p>面向中国快消品牌的品类经理，帮助他们每周识别市场异常，并决定补货和促销动作。</p></div></div>
+</div>
+<div class="quick-prompts"><button class="chip-button" data-prompt="补充目标用户与决策场景">补充用户与场景</button><button class="chip-button" data-prompt="补充客户证据">补充客户证据</button><button class="chip-button" data-prompt="定义首发范围">定义首发范围</button></div>
+<textarea id="chat-input" rows="3" placeholder="补充需求信息，或使用上方快捷问题…"></textarea>
+<div class="actions"><span class="hint" id="clarify-guide">目的：补齐会影响首发范围与数据依赖的关键信息。</span><button class="button" id="send-message">保存补充信息 →</button></div>
+</section>
+<aside class="side-stack">
+<section class="card"><h2>实时结构化总结</h2><div class="summary-item"><b>已确认</b><span id="summary-confirmed">目标用户：快消品牌品类经理</span></div><div class="summary-item"><b>待验证</b><span id="summary-pending">客户是否愿意为周度预警付费</span></div><div class="summary-item"><b>建议</b><span id="summary-suggestion">先明确首发市场、品类和数据更新频率</span></div></section>
+<section class="card"><h2>当前进度</h2><ol class="progress-list"><li class="done">客户与决策场景</li><li>客户证据</li><li>价值与边界</li><li>数据与依赖</li></ol></section>
+</aside>
+</div>
+</section>
+
+<section class="workflow-panel" id="draft">
+<div class="tool-banner"><span class="avatar">2</span><div><strong>Draft Product Spec</strong><span>AI 汇总访谈输入生成草案；PL 审阅、补充并确认后进入团队评审。</span></div><span class="tag amber">待 PL 确认</span></div>
+<div class="spec-layout">
+<section class="card"><div class="card-head"><div><h2>Draft Product Spec</h2><p>以下为根据演示访谈自动生成的初稿。</p></div><button class="button secondary" id="load-draft">重新生成草案</button></div>
+<div class="spec-grid"><div><b>目标客户与场景</b><p>中国快消品牌品类经理，在周度经营复盘中识别需要补货或调整促销的品类。</p></div><div><b>客户问题与证据</b><p>市场变化难以及时发现；目前仅有两位客户的访谈线索，需进一步验证。</p></div><div><b>价值主张</b><p>通过异常预警、变化解释与补货建议，缩短判断并采取行动的时间。</p></div><div><b>In / Out Scope</b><p>首发提供销售趋势、品类排名和异常提醒；不提供实时数据、自定义报表或跨国比较。</p></div><div><b>数据与依赖</b><p>依赖现有零售数据覆盖、周度更新 SLA、指标口径及数据团队确认。</p></div><div><b>成功标准</b><p>试点客户周度使用率与补货决策周期改善；门槛待 PL 确认。</p></div></div>
+<div class="actions"><button class="button secondary" id="back-clarify">继续澄清</button><button class="button" id="confirm-draft">确认 Draft Spec 并发起评审 →</button></div></section>
+<aside class="side-stack"><section class="card"><h2>草案检查</h2><div class="check high"><b>仍需补全：客户证据</b>建议至少记录 3 位目标客户的反馈与问题影响。</div><div class="check"><b>仍需确认：数据依赖</b>请数据团队确认覆盖范围、更新频率和口径。</div></section></aside>
+</div>
+</section>
+
+<section class="workflow-panel" id="review">
+<div class="tool-banner"><span class="avatar">3</span><div><strong>团队评审与 Ready Check</strong><span>你的目的：处理所有 Issue，再确认团队已具备进入线下可行性讨论的条件。</span></div><span class="tag red" id="review-issue-badge">1 个 Issue</span></div>
+<div class="review-layout">
+<section class="card"><div class="card-head"><div><h2>Issue Log</h2><p>各团队负责人基于只读 Draft Spec 提交的问题都会汇总在这里。PL 只能回复或接受风险，不能单方面关闭其他团队的 Issue。</p></div></div>
+<div id="issue-list"></div></section>
+<aside class="card"><h2>团队确认</h2><p>每个团队先提交评审结论，再由 PL 确认。所有确认完成且无待处理 Issue 后，才可进入可行性评审。</p><div id="review-status-list"></div><button class="button" id="start-feasibility" disabled>进入可行性评审准备 →</button></aside>
+</div>
+</section>
+
+<section class="workflow-panel" id="minutes">
+<div class="tool-banner"><span class="avatar">4</span><div><strong>可行性会议纪要回写</strong><span>会议在线下完成；在此粘贴、上传或加载模拟纪要，更新最终 Product Spec。</span></div><span class="tag blue">线下会议</span></div>
+<div class="minutes-layout"><section class="card"><label class="input-label" for="minutes-input">可行性评审会议纪要</label><textarea id="minutes-input" rows="11" placeholder="粘贴会议纪要，或加载模拟纪要进行测试…"></textarea><div class="actions"><button class="button secondary" id="load-minutes">加载模拟纪要</button><button class="button" id="apply-minutes">保存纪要并更新 Product Spec →</button></div><div class="success" id="minutes-success">会议纪要已保存，并已更新 O2O 的 Product Spec。下一步：组织排期讨论。</div></section><aside class="card"><h2>你需要提供什么？</h2><div class="summary-item"><b>会议结论</b><span>首发 Scope、通过或暂缓的决定</span></div><div class="summary-item"><b>变化与风险</b><span>数据依赖、责任人、待办事项</span></div><div class="summary-item"><b>完成后</b><span>平台保存纪要并解锁项目计划</span></div></aside></div>
+</section>
+
+<section class="workflow-panel" id="plan">
+<div class="tool-banner"><span class="avatar">5</span><div><strong>排期与任务分发</strong><span>排期会在线下执行；上传会议纪要后生成 Project Plan、角色职责和执行任务。</span></div><span class="tag green">最终阶段</span></div>
+<section class="card"><div class="card-head"><div><h2>Project Plan</h2><p>你的目的：先编辑各团队的任务名称与截止时间，再确认分发。分发后，各角色的 Overview 将立即出现对应任务。</p></div><button class="button secondary" id="load-schedule">载入建议排期</button></div><div class="plan-grid" id="plan-editor"><div class="plan-card" data-plan-role="Dsci"><span class="tag purple">Dsci</span><label>任务名称<input data-plan-title></label><label>截止时间<input type="date" data-plan-due></label></div><div class="plan-card" data-plan-role="DA & RV"><span class="tag amber">DA &amp; RV</span><label>任务名称<input data-plan-title></label><label>截止时间<input type="date" data-plan-due></label></div><div class="plan-card" data-plan-role="Ops"><span class="tag green">Ops</span><label>任务名称<input data-plan-title></label><label>截止时间<input type="date" data-plan-due></label></div></div><div class="actions"><button class="button secondary" id="save-plan">保存任务计划</button><button class="button" id="complete-plan">确认任务分发</button></div><div id="delivery-status-list"></div><div class="success" id="plan-success">任务分发已保存；一期产品开发可以开始。</div></section>
+</section>
+</div>
+</section>
+</main>
+</div>
+</div>
+<script src="assets/app.js?v=5"></script>
+</body>
+</html>

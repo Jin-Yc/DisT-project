@@ -1,10 +1,270 @@
-const checks=[['目标客户与用户角色','目标客户只写到“品牌客户”，没有明确谁实际使用、谁做何种决策。','高','补充首发客户角色及其当前决策流程。','角色|品类经理|用户'],['客户问题与证据','描述了业务期待，但没有客户反馈、使用频率或问题影响的证据。','高','访谈 3 位目标客户，并记录当前发现异常与采取行动的耗时。','反馈|访谈|证据|调研'],['价值主张','已有功能描述，但尚未说明它如何改善具体业务结果。','中','将价值改写为可验证的客户结果，例如缩短补货判断周期。','缩短|决策|补货|业务结果'],['In / Out Scope','有首发功能，但没有明确首发不做什么，范围扩张风险很高。','中','写出首发国家、品类、数据粒度，以及至少 2 个 Out of Scope。','不提供|不做|out of scope|范围'],['数据与交付依赖','缺少覆盖、更新时效、指标口径和确认责任人。','高','请数据团队确认数据覆盖、周度更新 SLA 与指标定义。','覆盖|口径|sla|负责人'],['成功标准','没有试点判断标准或衡量基线。','中','增加用户行为和业务价值各一个指标，并设定试点门槛。','指标|使用率|%|成功标准']];
-const flow=[['问题与客户','谁会在什么决策中使用这个产品？','请写出优先客户角色、他们的具体决策，以及现在如何完成该决策。','首发面向中国市场的快消品牌品类经理，帮助他们每周判断哪些品类需要调整补货和促销。','挑战：如果不能指出“决策”，周度更新只是功能，不是客户价值。'],['场景与证据','什么证据表明这是高优先级问题？','区分已知事实、客户反馈和你的假设；没有证据也可以诚实标记。','两位客户在季度回顾中提到周度变化难以及时发现；尚未验证他们是否愿意为此付费。','挑战：两位客户的反馈能说明问题存在，不能证明市场规模或付费意愿。'],['价值与边界','首发版本明确做什么，又坚决不做什么？','以客户能获得的结果描述价值；列出一个最重要的 Out of Scope。','提供品类异常预警、变化解释和补货建议；首发不提供自定义报表、实时数据或跨国比较。','挑战：请避免把“异常预警”写成卖点；卖点应是客户缩短判断和行动的时间。']];
-function setupTabs(){const activate=id=>{const button=document.querySelector('.tool-tab[data-panel="'+id+'"]');if(!button)return;document.querySelectorAll('.tool-tab,.tool-panel').forEach(item=>item.classList.remove('active'));button.classList.add('active');document.querySelector('#'+id).classList.add('active')};document.querySelectorAll('.tool-tab').forEach(button=>button.addEventListener('click',()=>{activate(button.dataset.panel);history.replaceState(null,'','#'+button.dataset.panel)}));activate(location.hash.slice(1)||'readiness')}
-function setupReview(){const run=document.querySelector('#review-run');if(!run)return;run.addEventListener('click',()=>{const text=document.querySelector('#review-text').value.toLowerCase();let done=0,html='';checks.forEach(check=>{const found=check[4].split('|').some(word=>text.includes(word));if(found){done++;html+='<div class="check good"><b>'+check[0]+' · 已有线索</b>文档中出现了相关信息；评审时仍需确认其可验证性。</div>'}else html+='<div class="check '+(check[2]==='高'?'high':'')+'"><b>'+check[0]+' · '+check[2]+'优先级</b>'+check[1]+'<br><b>下一步：'+check[3]+'</b></div>'});document.querySelector('#review-score').textContent=done+'/6';document.querySelector('#review-items').innerHTML=html;document.querySelector('#review-empty').style.display='none';document.querySelector('#review-output').classList.add('show')})}
-function setupDist(){const next=document.querySelector('#dist-next');if(!next)return;let index=0;const render=()=>{const step=flow[index];document.querySelector('#dist-step').textContent='步骤 '+(index+1)+' / '+flow.length+' · '+step[0];document.querySelector('#dist-question').textContent=step[1];document.querySelector('#dist-hint').textContent=step[2];document.querySelector('#dist-answer').value=step[3];document.querySelector('#dist-challenge').textContent=step[4]};const advance=()=>{index++;if(index<flow.length)render();else{document.querySelector('#dist-work').style.display='none';document.querySelector('#dist-result').classList.add('show')}};next.addEventListener('click',advance);document.querySelector('#dist-skip').addEventListener('click',advance);render()}
-setupTabs();setupReview();setupDist();
-document.querySelectorAll('[data-task]').forEach(task=>task.addEventListener('change',event=>task.classList.toggle('done',event.target.checked)));
-const createForm=document.querySelector('#create-project');if(createForm)createForm.addEventListener('submit',event=>{event.preventDefault();document.querySelector('#create-success').classList.add('show');createForm.reset()});
-const projectSearch=document.querySelector('#project-search');if(projectSearch){const stage=document.querySelector('#project-stage'),type=document.querySelector('#project-type'),rows=[...document.querySelectorAll('.project-table tbody tr')],filter=()=>rows.forEach(row=>{const text=row.innerText.toLowerCase(),visible=(!stage.value||row.dataset.stage===stage.value)&&(!type.value||row.dataset.type===type.value)&&text.includes(projectSearch.value.toLowerCase());row.style.display=visible?'':'none'});[projectSearch,stage,type].forEach(control=>control.addEventListener('input',filter));[stage,type].forEach(control=>control.addEventListener('change',filter))}
-const sidebar=document.querySelector('.sidebar');if(sidebar){const toggle=document.createElement('button');toggle.className='sidebar-toggle';toggle.type='button';toggle.setAttribute('aria-label','折叠侧边栏');toggle.textContent='‹';toggle.addEventListener('click',()=>{const collapsed=document.querySelector('.shell').classList.toggle('sidebar-collapsed');toggle.textContent=collapsed?'›':'‹';toggle.setAttribute('aria-label',collapsed?'展开侧边栏':'折叠侧边栏')});sidebar.append(toggle)}
+const roles = ['PL', 'Dsci', 'DA & RV', 'Ops'];
+const teamRoles = ['Dsci', 'DA & RV', 'Ops'];
+const roleKey = 'dist-role';
+const panels = ['clarify', 'draft', 'review', 'minutes', 'plan'];
+let workflowState;
+
+function currentRole() { return localStorage.getItem(roleKey) || 'PL'; }
+
+function applyRole(role) {
+  const selected = roles.includes(role) ? role : 'PL';
+  document.body.classList.toggle('role-pl', selected === 'PL');
+  document.querySelectorAll('#role-select').forEach(select => select.value = selected);
+  document.querySelectorAll('#role-name').forEach(node => node.textContent = selected);
+  document.querySelectorAll('#role-avatar').forEach(node => node.textContent = selected === 'DA & RV' ? 'DA' : selected.slice(0, 2).toUpperCase());
+  document.querySelectorAll('#topbar-role').forEach(node => node.textContent = selected);
+  localStorage.setItem(roleKey, selected);
+  const isPlWorkflow = location.pathname.endsWith('/workflow.html');
+  const isTeamWorkflow = location.pathname.endsWith('/role-workflow.html');
+  if (isPlWorkflow && selected !== 'PL') location.href = 'index.html';
+  if (isTeamWorkflow && selected === 'PL') location.href = 'workflow.html';
+}
+
+function setupRoles() {
+  applyRole(currentRole());
+  document.querySelectorAll('#role-select').forEach(select => select.addEventListener('change', event => {
+    const role = event.target.value;
+    applyRole(role);
+    if (location.pathname.endsWith('/role-workflow.html') && teamRoles.includes(role)) {
+      location.href = 'role-workflow.html';
+      return;
+    }
+    if (location.pathname.endsWith('/project-view.html')) {
+      location.reload();
+      return;
+    }
+    if (document.querySelector('#projects')) setupOverview();
+  }));
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {headers: {'Content-Type': 'application/json', ...(options.headers || {})}, ...options});
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || '操作未完成，请稍后重试。');
+  return body;
+}
+
+function setFeedback(selector, message, error = false) {
+  const node = document.querySelector(selector);
+  if (!node) return;
+  node.textContent = message;
+  node.className = `workflow-feedback show${error ? ' error' : ''}`;
+}
+
+function statusText(status) {
+  return ({pending: '待处理', awaiting_pl_confirmation: '待 PL 确认', completed: '已完成', open: '待 PL 处理', awaiting_submitter: '待提出团队确认', closed: '已关闭', accepted_risk: '已接受风险', '待确认': '待确认', '进行中': '进行中', '待开始': '待开始'})[status] || status;
+}
+
+function showPanel(id) {
+  const step = panels.indexOf(id);
+  if (workflowState && !workflowState.unlocked_steps.includes(step)) return setFeedback('#workflow-feedback', '请先完成当前步骤的关键操作，再进入下一步。', true);
+  document.querySelectorAll('.flow-step,.workflow-panel').forEach(item => item.classList.remove('active'));
+  document.querySelector(`.flow-step[data-panel="${id}"]`)?.classList.add('active');
+  document.querySelector(`#${id}`)?.classList.add('active');
+  history.replaceState(null, '', `#${id}`);
+}
+
+function renderChat(chat) {
+  const log = document.querySelector('#chat-log');
+  if (!log) return;
+  log.innerHTML = chat.map(message => `<div class="message ${message.role === 'ai' ? 'ai' : 'user'}"><span class="avatar">${message.role === 'ai' ? 'AI' : 'PL'}</span><div><p>${message.text}</p></div></div>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderPlIssues(issues) {
+  const list = document.querySelector('#issue-list');
+  if (!list) return;
+  list.innerHTML = issues.length ? issues.map(issue => `<div class="issue-row" data-issue-id="${issue.id}">
+    <span class="tag ${issue.status === 'open' ? 'red' : issue.status === 'closed' ? 'green' : 'amber'}">${statusText(issue.status)}</span>
+    <div><b>${issue.title}</b><div class="issue-meta"><span>${issue.owner_role}</span><span>${issue.category}</span><span>${issue.priority}优先级</span></div><p>${issue.detail}</p>
+    ${issue.pl_response ? `<div class="callout"><b>PL 处理说明：</b>${issue.pl_response}</div>` : ''}
+    ${issue.status === 'open' ? `<div class="issue-response"><textarea placeholder="说明你如何更新 Spec、处理问题或接受风险"></textarea><div class="actions"><button class="button secondary" data-issue-action="awaiting_submitter">更新 Spec，待提出团队确认</button><button class="button secondary" data-issue-action="accepted_risk">接受风险</button></div></div>` : ''}</div></div>`).join('') : '<div class="empty">团队尚未提交 Issue。</div>';
+}
+
+function renderReviewStatus(state) {
+  const list = document.querySelector('#review-status-list');
+  if (!list) return;
+  list.innerHTML = teamRoles.map(role => {
+    const task = state.review_tasks[role];
+    if (!task) return `<div class="review-status"><b>${role}</b><span>等待 PL 发起团队评审</span></div>`;
+    return `<div class="review-status"><b>${role}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span>${task.conclusion ? `<span>结论：${task.conclusion}</span>` : ''}${task.status === 'awaiting_pl_confirmation' ? `<button class="button secondary" data-review-confirm="${role}">确认 ${role} 评审完成</button>` : ''}</div>`;
+  }).join('');
+}
+
+function renderPlan(state) {
+  document.querySelectorAll('[data-plan-role]').forEach(card => {
+    const task = state.plan_tasks[card.dataset.planRole];
+    card.querySelector('[data-plan-title]').value = task.title;
+    card.querySelector('[data-plan-due]').value = task.due_date;
+    const locked = state.stage !== 'plan';
+    card.querySelectorAll('input').forEach(input => input.disabled = locked);
+  });
+  document.querySelector('#save-plan').disabled = state.stage !== 'plan';
+  document.querySelector('#complete-plan').disabled = state.stage !== 'plan';
+  const list = document.querySelector('#delivery-status-list');
+  const tasks = state.delivery_tasks || {};
+  list.innerHTML = Object.keys(tasks).length ? `<div class="delivery-status"><b>任务分发进度</b>${teamRoles.map(role => {
+    const task = tasks[role];
+    return `<div class="review-status"><b>${role} · ${task.title}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span>${task.result ? `<span>结果：${task.result}</span>` : ''}${task.status === 'awaiting_pl_confirmation' ? `<button class="button secondary" data-delivery-confirm="${role}">确认 ${role} 交付完成</button>` : ''}</div>`;
+  }).join('')}</div>` : '';
+}
+
+function renderWorkflow(state) {
+  workflowState = state;
+  document.querySelector('#workflow-project-name').textContent = state.project.name;
+  document.querySelector('#sidebar-project-name').textContent = state.project.name;
+  document.querySelector('#workflow-status').textContent = state.stage_label;
+  document.querySelector('#sidebar-stage').textContent = state.stage_label;
+  document.querySelector('#issue-count').textContent = `${state.open_issue_count} 个待处理问题`;
+  document.querySelector('#review-issue-badge').textContent = `${state.open_issue_count} 个 Issue`;
+  document.querySelector('#summary-confirmed').textContent = state.summary.confirmed;
+  document.querySelector('#summary-pending').textContent = state.summary.pending;
+  document.querySelector('#summary-suggestion').textContent = state.summary.suggestion;
+  renderChat(state.chat); renderPlIssues(state.issues); renderReviewStatus(state); renderPlan(state);
+  document.querySelectorAll('.flow-step').forEach((button, index) => {
+    const unlocked = state.unlocked_steps.includes(index); button.disabled = !unlocked; button.classList.toggle('locked', !unlocked);
+  });
+  document.querySelector('#start-feasibility').disabled = !state.ready_for_feasibility;
+  document.querySelector('#minutes-input').value = state.minutes || document.querySelector('#minutes-input').value;
+  document.querySelector('#minutes-success').classList.toggle('show', state.minutes_applied);
+  document.querySelector('#plan-success').classList.toggle('show', state.plan_completed);
+}
+
+async function plAction(path, body, success, nextPanel) {
+  try { const state = await api(path, {method: 'POST', body: JSON.stringify(body || {})}); renderWorkflow(state); setFeedback('#workflow-feedback', success); if (nextPanel) showPanel(nextPanel); }
+  catch (error) { setFeedback('#workflow-feedback', error.message, true); }
+}
+
+async function setupWorkflow() {
+  if (!document.querySelector('#workflow-app')) return;
+  try { renderWorkflow(await api('/api/o2o')); } catch (error) { setFeedback('#workflow-feedback', '无法读取 O2O 项目，请确认 Flask 服务已启动。', true); return; }
+  document.querySelectorAll('.flow-step').forEach(button => button.addEventListener('click', () => showPanel(button.dataset.panel)));
+  const initial = location.hash.slice(1); if (initial && workflowState.unlocked_steps.includes(panels.indexOf(initial))) showPanel(initial);
+  const input = document.querySelector('#chat-input');
+  document.querySelector('#send-message').addEventListener('click', () => {
+    const text = input.value.trim(); if (!text) return setFeedback('#workflow-feedback', '请先补充需求信息。', true);
+    plAction('/api/o2o/chat', {text}, '信息已保存，并已同步到结构化总结。'); input.value = '';
+  });
+  document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => { input.value = button.dataset.prompt; input.focus(); }));
+  document.querySelector('#confirm-draft').addEventListener('click', () => plAction('/api/o2o/draft/confirm', {}, 'Draft Spec 已确认，团队已收到 O2O 评审任务。下一步：等待并处理团队反馈。', 'review'));
+  document.querySelector('#back-clarify').addEventListener('click', () => showPanel('clarify'));
+  document.querySelector('#load-draft').addEventListener('click', () => setFeedback('#workflow-feedback', 'Draft Spec 已基于当前访谈记录重新整理，请审阅并确认。'));
+  document.querySelector('#review').addEventListener('click', event => {
+    const action = event.target.closest('[data-issue-action]');
+    if (action) {
+      const row = action.closest('[data-issue-id]'); const response = row.querySelector('textarea').value.trim();
+      return plAction(`/api/o2o/issues/${row.dataset.issueId}/respond`, {response, action: action.dataset.issueAction}, action.dataset.issueAction === 'accepted_risk' ? 'Issue 已标记为接受风险。' : 'PL 回复已发送，等待提出团队确认。');
+    }
+    const confirm = event.target.closest('[data-review-confirm]');
+    if (confirm) plAction(`/api/o2o/reviews/${encodeURIComponent(confirm.dataset.reviewConfirm)}/confirm`, {}, `${confirm.dataset.reviewConfirm} 的评审结论已由 PL 确认。`);
+  });
+  document.querySelector('#start-feasibility').addEventListener('click', () => plAction('/api/o2o/feasibility/start', {}, '团队评审已完成。下一步：上传或粘贴可行性会议纪要。', 'minutes'));
+  const minutes = document.querySelector('#minutes-input');
+  document.querySelector('#load-minutes').addEventListener('click', () => { minutes.value = '可行性评审会议纪要（模拟）\n\n1. 首发范围确认：先覆盖中国市场、华东现代渠道与饮料品类。\n2. 数据团队确认：每周二完成数据更新；销售指标以标准化口径提供。\n3. 风险：需在试点前确认两家客户的数据使用授权。\n4. 结论：满足进入排期讨论条件；由 PL 更新最终 Product Spec。'; setFeedback('#workflow-feedback', '已加载模拟纪要。确认内容无误后，保存并更新 Product Spec。'); });
+  document.querySelector('#apply-minutes').addEventListener('click', () => plAction('/api/o2o/minutes', {minutes: minutes.value.trim()}, '会议纪要与最终 Product Spec 已保存。下一步：编辑并确认任务分发。', 'plan'));
+  document.querySelector('#load-schedule').addEventListener('click', () => setFeedback('#workflow-feedback', '已载入建议排期。请检查各团队的任务名称和截止时间。'));
+  const planTasks = () => Object.fromEntries([...document.querySelectorAll('[data-plan-role]')].map(card => [card.dataset.planRole, {title: card.querySelector('[data-plan-title]').value.trim(), due_date: card.querySelector('[data-plan-due]').value}]));
+  document.querySelector('#save-plan').addEventListener('click', () => {
+    const tasks = planTasks();
+    plAction('/api/o2o/plan', {tasks}, '任务计划已保存。确认无误后即可分发。');
+  });
+  document.querySelector('#complete-plan').addEventListener('click', async () => {
+    try {
+      let state = await api('/api/o2o/plan', {method: 'POST', body: JSON.stringify({tasks: planTasks()})});
+      state = await api('/api/o2o/plan/complete', {method: 'POST', body: JSON.stringify({})});
+      renderWorkflow(state);
+      setFeedback('#workflow-feedback', '任务已按当前内容分发；各角色 Overview 已出现对应的 O2O 任务。');
+    } catch (error) { setFeedback('#workflow-feedback', error.message, true); }
+  });
+  document.querySelector('#plan').addEventListener('click', event => { const confirm = event.target.closest('[data-delivery-confirm]'); if (confirm) plAction(`/api/o2o/delivery/${encodeURIComponent(confirm.dataset.deliveryConfirm)}/confirm`, {}, `${confirm.dataset.deliveryConfirm} 的交付结果已由 PL 确认。`); });
+}
+
+function renderRoleWorkflow(state, role) {
+  document.querySelector('#role-workflow-title').textContent = `${role} · O2O 工作流`;
+  document.querySelector('#role-sidebar-stage').textContent = state.stage_label;
+  document.querySelector('#role-workflow-stage').textContent = state.stage_label;
+  document.querySelector('#role-focus').textContent = role;
+  document.querySelector('#role-focus-detail').textContent = state.role_focus;
+  const review = state.role_review_task;
+  document.querySelector('#role-review-status').textContent = review ? statusText(review.status) : '等待 PL 发起评审';
+  document.querySelector('#role-review-guide').textContent = review ? '请先提出需要 PL 处理的问题；所有问题得到可接受的处理后，再提交评审结论。' : 'PL 确认 Draft Product Spec 后，你会收到 O2O 的评审任务。';
+  const canReview = review && review.status === 'pending';
+  document.querySelectorAll('#role-review-card input,#role-review-card select,#role-review-card textarea,#submit-issue,#submit-review').forEach(node => node.disabled = !canReview);
+  document.querySelector('#my-issue-list').innerHTML = state.my_issues.length ? state.my_issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${issue.title} · ${statusText(issue.status)}</b>${issue.detail}${issue.pl_response ? `<br><b>PL 回复：</b>${issue.pl_response}` : ''}${issue.status === 'awaiting_submitter' ? `<br><button class="text-link" data-role-issue-confirm="${issue.id}">确认 Issue 已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
+  const delivery = state.role_delivery_task;
+  document.querySelector('#delivery-status').textContent = delivery ? statusText(delivery.status) : '等待任务分发';
+  document.querySelector('#delivery-title').textContent = delivery ? delivery.title : '暂无任务';
+  document.querySelector('#delivery-due').textContent = delivery ? `截止 ${delivery.due_date} · 提交后由 PL 确认完成。` : 'PL 完成任务分发后显示截止时间。';
+  document.querySelector('#delivery-result').disabled = !delivery || delivery.status !== 'pending';
+  document.querySelector('#submit-delivery').disabled = !delivery || delivery.status !== 'pending';
+}
+
+async function roleAction(path, body, success) {
+  try { const state = await api(path, {method: 'POST', body: JSON.stringify(body || {})}); renderRoleWorkflow(state, currentRole()); setFeedback('#role-feedback', success); }
+  catch (error) { setFeedback('#role-feedback', error.message, true); }
+}
+
+async function setupRoleWorkflow() {
+  if (!document.querySelector('#role-workflow-app')) return;
+  const role = currentRole(); if (!teamRoles.includes(role)) { location.href = role === 'PL' ? 'workflow.html' : 'index.html'; return; }
+  try { renderRoleWorkflow(await api(`/api/o2o/role?role=${encodeURIComponent(role)}`), role); } catch (error) { setFeedback('#role-feedback', '无法读取项目工作流，请确认 Flask 服务已启动。', true); return; }
+  document.querySelector('#submit-issue').addEventListener('click', () => roleAction('/api/o2o/issues', {role, category: document.querySelector('#issue-category').value, priority: document.querySelector('#issue-priority').value, title: document.querySelector('#issue-title').value.trim(), detail: document.querySelector('#issue-detail').value.trim()}, 'Issue 已提交给 PL。'));
+  document.querySelector('#submit-review').addEventListener('click', () => roleAction('/api/o2o/reviews/submit', {role, conclusion: document.querySelector('#review-conclusion').value.trim()}, '评审结论已提交，等待 PL 确认。'));
+  document.querySelector('#my-issue-list').addEventListener('click', event => { const button = event.target.closest('[data-role-issue-confirm]'); if (button) roleAction(`/api/o2o/issues/${button.dataset.roleIssueConfirm}/confirm`, {role}, 'Issue 已由提出团队确认关闭。'); });
+  document.querySelector('#submit-delivery').addEventListener('click', () => roleAction('/api/o2o/delivery/submit', {role, result: document.querySelector('#delivery-result').value.trim()}, '交付结果已提交，等待 PL 确认。'));
+}
+
+async function setupOverview() {
+  const table = document.querySelector('#projects tbody'); if (!table) return;
+  try {
+    const role = currentRole(); const data = await api(`/api/overview?role=${encodeURIComponent(role)}`);
+    table.innerHTML = data.projects.map(project => {
+      const link = project.pl_project ? (role === 'PL' ? 'workflow.html' : 'role-workflow.html') : `project-view.html?project=${project.id}`;
+      return `<tr><td><a href="${link}">${project.name}</a></td><td>${project.type}</td><td><span class="tag ${project.name === 'O2O' ? 'amber' : 'blue'}">${project.stage}</span></td><td><span class="tag ${project.readiness.includes('待处理') || project.readiness.includes('风险') ? 'red' : 'amber'}">${project.readiness}</span></td><td>${project.next}</td></tr>`;
+    }).join('');
+    const workspace = document.querySelector('#team-workspace');
+    if (role !== 'PL' && workspace) {
+      document.querySelector('#team-workspace-title').textContent = `${role} 的工作台`;
+      document.querySelector('#team-workspace-desc').textContent = data.tasks.length ? `以下任务来自 O2O；你的结论和交付结果均需由 PL 确认。` : `PL 尚未向 ${role} 分配 O2O 任务。`;
+      document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => `<div class="team-task"><span class="tag blue">${task.kind} · ${task.project}</span><b>${task.project_id ? `<a href="project-view.html?project=${task.project_id}">${task.title}</a>` : task.title}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span></div>`).join('') : '<div class="empty">暂无待处理任务。</div>';
+    }
+  } catch (_) { /* Static overview remains available if the server is unavailable. */ }
+}
+
+async function setupIterationProject() {
+  if (!document.querySelector('#iteration-project-app')) return;
+  const projectId = new URLSearchParams(location.search).get('project');
+  if (!['ri', 'ecom'].includes(projectId)) {
+    document.querySelector('#iteration-feedback').textContent = '请选择 RI 或 Ecom 项目。';
+    document.querySelector('#iteration-feedback').className = 'workflow-feedback show error';
+    return;
+  }
+  try {
+    const project = await api(`/api/projects/${projectId}?role=${encodeURIComponent(currentRole())}`);
+    document.title = `DisT · ${project.name} 迭代概览`;
+    document.querySelector('#iteration-sidebar-name').textContent = project.name;
+    document.querySelector('#iteration-sidebar-stage').textContent = project.stage;
+    document.querySelector('#iteration-project-name').textContent = `${project.name} · 项目迭代概览`;
+    document.querySelector('#iteration-project-objective').textContent = project.objective;
+    document.querySelector('#iteration-project-version').textContent = project.iteration;
+    document.querySelector('#iteration-project-stage').textContent = project.stage;
+    document.querySelector('#iteration-objective').textContent = project.objective;
+    document.querySelector('#iteration-scope').textContent = project.scope;
+    document.querySelector('#iteration-risk').textContent = project.risk;
+    document.querySelector('#iteration-task-list').innerHTML = teamRoles.map(role => {
+      const task = project.tasks[role];
+      return `<div class="team-task"><span class="tag blue">${role}</span><b>${task.title}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span></div>`;
+    }).join('');
+    if (project.role !== 'PL') {
+      document.querySelector('#iteration-my-task').innerHTML = `<div class="team-task"><span class="tag blue">${project.role}</span><b>${project.my_task.title}</b><span>${statusText(project.my_task.status)} · 截止 ${project.my_task.due_date}</span></div>`;
+    }
+  } catch (error) { setFeedback('#iteration-feedback', error.message, true); }
+}
+
+function setupSidebar() {
+  const sidebar = document.querySelector('.sidebar'); if (!sidebar) return;
+  const toggle = document.createElement('button'); toggle.className = 'sidebar-toggle'; toggle.type = 'button'; toggle.setAttribute('aria-label', '折叠侧边栏'); toggle.textContent = '‹';
+  toggle.addEventListener('click', () => { const collapsed = document.querySelector('.shell').classList.toggle('sidebar-collapsed'); toggle.textContent = collapsed ? '›' : '‹'; toggle.setAttribute('aria-label', collapsed ? '展开侧边栏' : '折叠侧边栏'); }); sidebar.append(toggle);
+}
+
+setupRoles(); setupWorkflow(); setupRoleWorkflow(); setupOverview(); setupIterationProject(); setupSidebar();

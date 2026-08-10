@@ -9,6 +9,10 @@ function currentRole() { return localStorage.getItem(roleKey) || 'PL'; }
 function applyRole(role) {
   const selected = roles.includes(role) ? role : 'PL';
   document.body.classList.toggle('role-pl', selected === 'PL');
+  // Keep role-specific navigation deterministic even when a browser applies
+  // different default styles to hidden links or native controls.
+  document.querySelectorAll('.pl-only').forEach(node => node.toggleAttribute('hidden', selected !== 'PL'));
+  document.querySelectorAll('.team-only').forEach(node => node.toggleAttribute('hidden', selected === 'PL'));
   document.querySelectorAll('#role-select').forEach(select => select.value = selected);
   document.querySelectorAll('#role-name').forEach(node => node.textContent = selected);
   document.querySelectorAll('#role-avatar').forEach(node => node.textContent = selected === 'DA & RV' ? 'DA' : selected.slice(0, 2).toUpperCase());

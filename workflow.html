@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DisT · PL 工作流</title>
-<link rel="stylesheet" href="assets/app.css"><link rel="stylesheet" href="assets/ui-polish.css">
+<link rel="stylesheet" href="assets/app.css?v=6"><link rel="stylesheet" href="assets/ui-polish.css?v=6">
 </head>
 <body>
 <div class="shell">
@@ -69,7 +69,7 @@
 <section class="card"><div class="card-head"><div><h2>Draft Product Spec</h2><p>以下为根据演示访谈自动生成的初稿。</p></div><button class="button secondary" id="load-draft">重新生成草案</button></div>
 <div class="spec-grid"><div><b>目标客户与场景</b><p>中国快消品牌品类经理，在周度经营复盘中识别需要补货或调整促销的品类。</p></div><div><b>客户问题与证据</b><p>市场变化难以及时发现；目前仅有两位客户的访谈线索，需进一步验证。</p></div><div><b>价值主张</b><p>通过异常预警、变化解释与补货建议，缩短判断并采取行动的时间。</p></div><div><b>In / Out Scope</b><p>首发提供销售趋势、品类排名和异常提醒；不提供实时数据、自定义报表或跨国比较。</p></div><div><b>数据与依赖</b><p>依赖现有零售数据覆盖、周度更新 SLA、指标口径及数据团队确认。</p></div><div><b>成功标准</b><p>试点客户周度使用率与补货决策周期改善；门槛待 PL 确认。</p></div></div>
 <div class="actions"><button class="button secondary" id="back-clarify">继续澄清</button><button class="button" id="confirm-draft">确认 Draft Spec 并发起评审 →</button></div></section>
-<aside class="side-stack"><section class="card"><h2>草案检查</h2><div class="check high"><b>仍需补全：客户证据</b>建议至少记录 3 位目标客户的反馈与问题影响。</div><div class="check"><b>仍需确认：数据依赖</b>请数据团队确认覆盖范围、更新频率和口径。</div></section></aside>
+<aside class="side-stack"><section class="card draft-checks"><h2>草案检查</h2><div class="check high"><b>仍需补全：客户证据</b>建议至少记录 3 位目标客户的反馈与问题影响。</div><div class="check"><b>仍需确认：数据依赖</b>请数据团队确认覆盖范围、更新频率和口径。</div></section></aside>
 </div>
 </section>
 
@@ -96,6 +96,6 @@
 </main>
 </div>
 </div>
-<script src="assets/app.js?v=5"></script>
+<script src="assets/app.js?v=6"></script>
 </body>
 </html>

@@ -97,8 +97,7 @@ def build_app(database_path: Path | None = None) -> Flask:
         with connection() as db:
             db.execute("CREATE TABLE IF NOT EXISTS workflow_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS pl_project_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
-            if not db.execute("SELECT 1 FROM workflow_state WHERE project_id = 'o2o'").fetchone():
-                db.execute("INSERT INTO workflow_state VALUES (?, ?)", ("o2o", json.dumps(INITIAL_STATE, ensure_ascii=False)))
+            db.execute("DELETE FROM workflow_state WHERE project_id = 'o2o'")
 
     def normalise(state: dict) -> dict:
         had_review_tasks = "review_tasks" in state
@@ -259,6 +258,11 @@ def build_app(database_path: Path | None = None) -> Flask:
 
     def error(message: str, status: int = 409):
         return jsonify({"error": message}), status
+
+    @app.before_request
+    def retire_o2o_api():
+        if request.path.startswith("/api/o2o"):
+            return error("O2O 示例工作流已退役；请由 PL 新建项目开始。", 410)
 
     def positioning_fallback(context: dict, message: str = "") -> dict:
         name = context.get("productName") or "当前方案"

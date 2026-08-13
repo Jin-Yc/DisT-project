@@ -59,7 +59,7 @@
   }
   function resetToEmptyStepOne() { activeId = null; plan = null; answers = []; index = 0; reportReviewed = false; teamReviewStarted = false; serverProjectVerified = false; reviewPhase = null; reviewState = null; leaderChecks = {PL:false, Dsci:false, 'DA & RV':false, Ops:false}; populateContext({}); $('#project-type').value = ''; applyProjectType(); $('#project-file').value = ''; $('#project-file-name').textContent = 'PDF、Word、TXT、Markdown'; $('#conversation').innerHTML = ''; updateStepNavigation(); switchView('create'); }
   async function clearSavedHistory() {
-    if (!window.confirm('将删除本地新建项目缓存，并撤销所有未确认的服务器项目及其团队任务。已确认项目不会受影响。是否继续？')) return;
+    if (!window.confirm('将删除本地新建项目缓存，并撤销所有未完成的服务器项目流程及其团队任务。已确认项目不会受影响。是否继续？')) return;
     try {
       const response = await fetch('/api/pl-projects/unconfirmed?role=PL', {method:'DELETE'});
       const data = await response.json().catch(() => ({}));
@@ -67,13 +67,13 @@
       try {
         localStorage.removeItem(storageKey); localStorage.removeItem(draftKey); localStorage.removeItem(flowKey);
       } catch (error) {
-        return feedback(`服务器已撤销 ${data.deleted_count || 0} 个未确认项目，但无法清除本地保存：${error.message}`, true);
+        return feedback(`服务器已撤销 ${data.deleted_count || 0} 个未完成项目流程，但无法清除本地保存：${error.message}`, true);
       }
       history = [];
       renderHistory();
       resetToEmptyStepOne();
       setupDraftRecovery();
-      feedback(`已清除保存历史，并撤销 ${data.deleted_count || 0} 个未确认项目及团队任务。`);
+      feedback(`已清除保存历史，并撤销 ${data.deleted_count || 0} 个未完成项目流程及团队任务。`);
     } catch (error) {
       feedback(`无法清除保存历史：${error.message || '请求失败。'} 本地数据未被清除。`, true);
     }
@@ -109,23 +109,7 @@
   function finishInterview() { if (answeredCount() < 10) return feedback('请先完成 10 个基础问题。', true); plan = basePlan(); reportReviewed = false; plan.positioning.target = answers[1] || plan.positioning.target; plan.positioning.pain = answers[4] || plan.positioning.pain; plan.positioning.value = answers[2] || plan.positioning.value; updateEntry('已生成初版报告'); setSidebar('方案报告', '待确认'); updateStepNavigation(); switchView('report'); persistFlow('report'); feedback('初版报告已生成。'); }
   async function analyzeMinutes() { const input = $('#minutes-text'), file = $('#minutes-file').files[0]; if (reviewPhase !== 'meeting' || !serverProjectVerified) return feedback('会议纪要仅可在首次评审完成并启动会议后处理。', true); if (!input.value.trim() && !file) return feedback('请先粘贴或上传会议纪要，再进行分析。', true); try { const response = await fetch(`/api/pl-projects/${encodeURIComponent(activeId)}/meeting`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({minutes:input.value.trim()})}); const data = await response.json(); if (!response.ok) throw new Error(data.error || '会议纪要未能保存。'); plan = data.final_plan; reviewPhase = data.review_phase; plan.maturity = plan.maturity || basePlan().maturity; plan.maturityDeltas = plan.maturityDeltas || {}; updateEntry('更新报告并发起最终评审'); $('#minutes-feedback').textContent = data.minutes_analysis; $('#minutes-feedback').className = 'workflow-feedback show'; const updates = $('#minutes-updates'); updates.hidden = false; updates.innerHTML = `<b>报告已更新</b>${(data.minutes_updates || []).map(item => `<span>${escape(item)}</span>`).join('')}`; renderReport(); persistFlow('report'); feedback('会议纪要已持久化，更新报告已进入最终评审。'); } catch (error) { feedback(error.message || '会议纪要处理失败。', true); } }
   function simulateMinutes() { $('#minutes-text').value = '会议主题：首版方案可行性评审\n参会角色：PL、业务负责人、数据负责人、研发负责人\n\n会议结论：试点客户确认当前异常发现滞后是核心痛点，认可“异常预警、原因解释、补货建议”作为首版优先范围；实时数据和复杂预测暂不纳入。\n数据与指标：数据负责人确认首期覆盖销量、库存、促销和价格口径；KPI 采用周度决策周期缩短、试点持续使用率与异常响应时效。\n风险与依赖：需在研发评审前完成数据字段映射，跨团队依赖由数据负责人在本周确认。\n行动项：PL 冻结首版优先级；数据负责人提交字段清单；研发负责人完成可行性评估。'; $('#minutes-feedback').textContent = '已生成模拟会议纪要，点击“分析并更新报告”即可同步成熟度与报告内容。'; $('#minutes-feedback').className = 'workflow-feedback show'; }
-  async function verifyInitialDistribution(id) {
-    let lastError;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (attempt) await new Promise(resolve => window.setTimeout(resolve, 150));
-      try {
-        const response = await fetch(`/api/pl-projects/${encodeURIComponent(id)}?role=PL`, {cache:'no-store'});
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || `服务返回 ${response.status}`);
-        if (data.id !== id || data.review_phase !== 'initial_review') throw new Error('服务器返回的项目状态不是首次团队评审。');
-        return data;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw new Error(`首次评审已提交，但无法从当前服务读取该项目（${lastError?.message || '读取失败'}）。请确认浏览器与本地服务使用同一实例和数据目录后重试。`);
-  }
-  async function startTeamReview() { if (!plan || !activeId) return feedback('请先完成 AI 访谈并生成初版报告。', true); try { const response = await fetch('/api/pl-projects', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:activeId, context:context(), finalPlan:plan})}); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || `服务返回 ${response.status}`); if (data.id !== activeId || data.review_phase !== 'initial_review') throw new Error('服务器未确认当前项目的首次团队评审；请停留在报告页后重试。'); await verifyInitialDistribution(activeId); serverProjectVerified = true; reviewPhase = data.review_phase; reviewState = data; teamReviewStarted = true; updateEntry('团队评审中'); updateStepNavigation(); switchView('review'); persistFlow('review'); feedback('首次团队评审任务已发送至 Dsci、DA & RV 和 Ops 的工作台。'); } catch (error) { feedback(`无法发起首次团队评审：${error.message || '请确认本地服务已启动。'}`, true); } }
+  async function startTeamReview() { if (!plan || !activeId) return feedback('请先完成 AI 访谈并生成初版报告。', true); try { const response = await fetch('/api/pl-projects', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:activeId, context:context(), finalPlan:plan})}); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || `服务返回 ${response.status}`); if (data.id !== activeId || data.review_phase !== 'initial_review') throw new Error('服务器未确认当前项目的首次团队评审；请停留在报告页后重试。'); serverProjectVerified = true; reviewPhase = data.review_phase; reviewState = data; teamReviewStarted = true; updateEntry('团队评审中'); updateStepNavigation(); switchView('review'); persistFlow('review'); feedback('首次团队评审任务已发送至 Dsci、DA & RV 和 Ops 的工作台。'); } catch (error) { feedback(`无法发起首次团队评审：${error.message || '请确认本地服务已启动。'}`, true); } }
   function renderTeamReviewState(state) {
     serverProjectVerified = true; reviewPhase = state.review_phase; const tasks = state.active_review_tasks || {};
     $('#new-project-review-list').innerHTML = ['Dsci', 'DA & RV', 'Ops'].map(role => `<article class="team-task creator-review-task"><span class="role-badge">${escape(role)}</span><b>${escape(role)} 评审</b><span>${escape(tasks[role]?.status || 'pending')}</span><p>${escape(tasks[role]?.conclusion || '等待结论')}</p></article>`).join('');

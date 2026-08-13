@@ -1,9 +1,10 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
-from app import build_app
+from app import INITIAL_STATE, build_app
 
 
 class WorkflowApiTest(unittest.TestCase):
@@ -20,44 +21,21 @@ class WorkflowApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, expected, response.get_json())
         return response.get_json()
 
-    def test_cross_role_review_and_delivery_flow(self):
-        self.assertEqual(self.client.get("/api/o2o").get_json()["stage"], "clarify")
-        self.assertEqual(self.post("/api/o2o/draft/confirm")["stage"], "review")
+    def test_database_initialization_removes_o2o_and_retires_legacy_api(self):
+        db_path = Path(self.temp.name) / "test.db"
+        with sqlite3.connect(db_path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM workflow_state").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM pl_project_state").fetchone()[0], 0)
 
-        dsci_issue = self.post("/api/o2o/issues", {
-            "role": "Dsci", "category": "Scope", "priority": "高",
-            "title": "确认首发市场", "detail": "需要明确中国市场的覆盖边界。",
-        })["my_issues"][0]
-        self.assertEqual(self.client.get("/api/o2o/role?role=Dsci").get_json()["my_issues"][0]["title"], "确认首发市场")
-        self.post(f"/api/o2o/issues/{dsci_issue['id']}/confirm", {"role": "Ops"}, expected=403)
-        self.post("/api/o2o/reviews/submit", {"role": "Dsci", "conclusion": "可以进入下一步。"}, expected=409)
-
-        self.post(f"/api/o2o/issues/{dsci_issue['id']}/respond", {
-            "action": "awaiting_submitter", "response": "Draft 已补充中国市场覆盖范围。",
-        })
-        self.post(f"/api/o2o/issues/{dsci_issue['id']}/confirm", {"role": "Dsci"})
-
-        for role in ("Dsci", "DA & RV", "Ops"):
-            self.post("/api/o2o/reviews/submit", {"role": role, "conclusion": f"{role} 评审结论：可行。"})
-            self.post(f"/api/o2o/reviews/{role}/confirm")
-
-        ready = self.client.get("/api/o2o").get_json()
-        self.assertTrue(ready["ready_for_feasibility"])
-        self.assertEqual(self.post("/api/o2o/feasibility/start")["stage"], "minutes")
-        self.assertEqual(self.post("/api/o2o/minutes", {"minutes": "模拟可行性会议纪要。"})["stage"], "plan")
-
-        tasks = {
-            "Dsci": {"title": "完成 O2O 方法论验证", "due_date": "2026-08-16"},
-            "DA & RV": {"title": "确认 O2O 数据覆盖", "due_date": "2026-08-18"},
-            "Ops": {"title": "确认 O2O 交付计划", "due_date": "2026-08-20"},
-        }
-        self.post("/api/o2o/plan", {"tasks": tasks})
-        self.assertEqual(self.post("/api/o2o/plan/complete")["stage"], "development")
-
-        self.post("/api/o2o/delivery/submit", {"role": "Dsci", "result": "方法论验证结论已归档。"})
-        self.post("/api/o2o/delivery/Dsci/confirm")
-        state = self.client.get("/api/o2o/role?role=Dsci").get_json()
-        self.assertEqual(state["role_delivery_task"]["status"], "completed")
+        legacy_db_path = Path(self.temp.name) / "legacy.db"
+        with sqlite3.connect(legacy_db_path) as db:
+            db.execute("CREATE TABLE workflow_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+            db.execute("INSERT INTO workflow_state VALUES (?, ?)", ("o2o", json.dumps(INITIAL_STATE)))
+        legacy_app = build_app(legacy_db_path)
+        with sqlite3.connect(legacy_db_path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM workflow_state WHERE project_id = 'o2o'").fetchone()[0], 0)
+        response = legacy_app.test_client().get("/api/o2o")
+        self.assertEqual(response.status_code, 410, response.get_json())
 
     def test_overview_contains_iteration_projects_and_pl_review_task(self):
         names = [item["name"] for item in self.client.get("/api/overview").get_json()["projects"]]
@@ -109,7 +87,6 @@ class WorkflowApiTest(unittest.TestCase):
         self.assertEqual(confirmed["pending_projects"], [])
 
     def test_pl_can_revoke_unconfirmed_projects_and_their_team_tasks(self):
-        o2o_stage = self.client.get("/api/o2o").get_json()["stage"]
         self.post("/api/pl-projects", {"id": "discard-me", "context": {"productName": "待撤销方案"}})
         for role in ("Dsci", "DA & RV", "Ops"):
             task_ids = [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"]]
@@ -138,7 +115,6 @@ class WorkflowApiTest(unittest.TestCase):
         for role in ("Dsci", "DA & RV", "Ops"):
             task_ids = [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"]]
             self.assertNotIn("discard-me", task_ids)
-        self.assertEqual(self.client.get("/api/o2o").get_json()["stage"], o2o_stage)
 
     def test_pl_project_meeting_required_issue_and_gates(self):
         self.post("/api/pl-projects", {"id": "pl-review", "context": {"productName": "门店洞察"}})

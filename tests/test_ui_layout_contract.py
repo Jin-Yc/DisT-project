@@ -9,14 +9,14 @@ class UiLayoutContractTest(unittest.TestCase):
     def test_all_app_pages_load_the_current_ui_bundle(self):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html"):
             page = (ROOT / name).read_text(encoding="utf-8")
-            self.assertIn("assets/app.css?v=8", page)
-            self.assertIn("assets/ui-polish.css?v=31", page)
-            self.assertIn("assets/app.js?v=14", page)
+            self.assertIn("assets/app.css?v=9", page)
+            self.assertIn("assets/ui-polish.css?v=32", page)
+            self.assertIn("assets/app.js?v=15", page)
         new_project = (ROOT / "new-project.html").read_text(encoding="utf-8")
-        self.assertIn("assets/app.css?v=8", new_project)
-        self.assertIn("assets/ui-polish.css?v=31", new_project)
-        self.assertIn("assets/app.js?v=14", new_project)
-        self.assertIn("assets/new-project.js?v=34", new_project)
+        self.assertIn("assets/app.css?v=9", new_project)
+        self.assertIn("assets/ui-polish.css?v=32", new_project)
+        self.assertIn("assets/app.js?v=15", new_project)
+        self.assertIn("assets/new-project.js?v=35", new_project)
 
     def test_all_app_pages_include_a_project_navigation_container(self):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html", "new-project.html"):
@@ -62,8 +62,8 @@ class UiLayoutContractTest(unittest.TestCase):
         self.assertIn("/api/pl-projects/unconfirmed?role=PL", script)
         self.assertIn("/api/pl-projects/${encodeURIComponent(activeId)}?role=PL", script)
         self.assertIn("data.id !== activeId || data.review_phase !== 'initial_review'", script)
-        self.assertIn("verifyInitialDistribution(activeId)", script)
-        self.assertIn("{cache:'no-store'}", script)
+        self.assertNotIn("verifyInitialDistribution", script)
+        self.assertIn("reviewState = data", script)
         self.assertIn("reviewState = data", script)
         self.assertIn("updateProjectTools()", script)
 

@@ -22,6 +22,8 @@ function applyRole(role) {
   const isTeamWorkflow = location.pathname.endsWith('/role-workflow.html');
   if (isPlWorkflow && selected !== 'PL') location.href = 'index.html';
   if (isTeamWorkflow && selected === 'PL') location.href = 'workflow.html';
+  if (location.pathname.endsWith('/new-project.html') && selected !== 'PL') location.href = 'index.html';
+  if (location.pathname.endsWith('/role-review.html') && selected === 'PL') location.href = 'index.html';
 }
 
 function setupRoles() {
@@ -37,6 +39,7 @@ function setupRoles() {
       location.reload();
       return;
     }
+    setupSidebarProjects();
     if (document.querySelector('#projects')) setupOverview();
   }));
 }
@@ -223,14 +226,14 @@ async function setupOverview() {
   try {
     const role = currentRole(); const data = await api(`/api/overview?role=${encodeURIComponent(role)}`);
     table.innerHTML = data.projects.map(project => {
-      const link = project.pl_project ? (role === 'PL' ? 'workflow.html' : 'role-workflow.html') : `project-view.html?project=${project.id}`;
-      return `<tr><td><a href="${link}">${project.name}</a></td><td>${project.type}</td><td><span class="tag ${project.name === 'O2O' ? 'amber' : 'blue'}">${project.stage}</span></td><td><span class="tag ${project.readiness.includes('待处理') || project.readiness.includes('风险') ? 'red' : 'amber'}">${project.readiness}</span></td><td>${project.next}</td></tr>`;
+      const link = project.pl_project ? (role === 'PL' ? 'new-project.html' : 'index.html#team-workspace') : `project-view.html?project=${project.id}`;
+      return `<tr><td><a href="${link}">${project.name}</a></td><td>${project.type}</td><td><span class="tag ${project.pl_project ? 'amber' : 'blue'}">${project.stage}</span></td><td><span class="tag ${project.readiness.includes('待处理') || project.readiness.includes('风险') ? 'red' : 'amber'}">${project.readiness}</span></td><td>${project.next}</td></tr>`;
     }).join('');
     const workspace = document.querySelector('#team-workspace');
     if (role !== 'PL' && workspace) {
       document.querySelector('#team-workspace-title').textContent = `${role} 的工作台`;
-      document.querySelector('#team-workspace-desc').textContent = data.tasks.length ? `以下任务来自 O2O；你的结论和交付结果均需由 PL 确认。` : `PL 尚未向 ${role} 分配 O2O 任务。`;
-      document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => `<div class="team-task"><span class="tag blue">${task.kind} · ${task.project}</span><b>${task.project_id ? `<a href="project-view.html?project=${task.project_id}">${task.title}</a>` : task.title}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span></div>`).join('') : '<div class="empty">暂无待处理任务。</div>';
+      document.querySelector('#team-workspace-desc').textContent = data.tasks.length ? '以下任务区分既有项目与 PL 新项目；请按工作指示完成评审或执行。' : `PL 尚未向 ${role} 分配新项目任务。`;
+      document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => task.pl_project ? `<a class="team-task task-link" href="role-review.html?project=${encodeURIComponent(task.project_id)}"><span class="tag amber">PL 新项目 · ${task.project}</span><b>${task.title}</b><span>${statusText(task.status)} · 点击进入团队评审</span></a>` : `<a class="team-task task-link" href="project-view.html?project=${encodeURIComponent(task.project_id)}"><span class="tag blue">${task.kind} · ${task.project}</span><b>${task.title}</b><span>${statusText(task.status)} · 查看项目</span></a>`).join('') : '<div class="empty">暂无待处理任务。</div>';
     }
   } catch (_) { /* Static overview remains available if the server is unavailable. */ }
 }
@@ -265,10 +268,56 @@ async function setupIterationProject() {
   } catch (error) { setFeedback('#iteration-feedback', error.message, true); }
 }
 
+function projectLink(project, role) {
+  return project.pl_project ? (role === 'PL' ? 'new-project.html' : 'index.html#team-workspace') : `project-view.html?project=${encodeURIComponent(project.id)}`;
+}
+
+function renderPlRoleReview(state, role) {
+  document.querySelector('#role-review-title').textContent = `${state.name} · 团队评审`;
+  document.querySelector('#role-review-role').textContent = role;
+  document.querySelector('#role-review-focus').textContent = state.role_focus;
+  document.querySelector('#role-review-background').textContent = state.name;
+  document.querySelector('#role-review-instruction').textContent = state.team_instructions[role];
+  const task = state.role_review_task || {};
+  document.querySelector('#role-review-task-status').textContent = statusText(task.status || 'pending');
+  const locked = task.status !== 'pending';
+  document.querySelectorAll('#role-review-app input,#role-review-app select,#role-review-app textarea,#submit-pl-issue,#submit-pl-review').forEach(node => node.disabled = locked);
+  const issues = state.my_issues || [];
+  document.querySelector('#pl-my-issues').innerHTML = issues.length ? issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${issue.title} · ${statusText(issue.status)}</b><span>${issue.detail}</span>${issue.pl_response ? `<span><b>PL 回复：</b>${issue.pl_response}</span>` : ''}${issue.status === 'awaiting_submitter' ? `<button class="text-link" data-pl-issue-confirm="${issue.id}">确认 Issue 已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
+}
+
+async function setupPlRoleReview() {
+  const app = document.querySelector('#role-review-app'); if (!app) return;
+  const role = currentRole(); if (!teamRoles.includes(role)) return location.href = 'index.html';
+  const projectId = new URLSearchParams(location.search).get('project');
+  if (!projectId) return setFeedback('#pl-role-feedback', '未指定需要评审的新项目。', true);
+  const load = async () => { try { renderPlRoleReview(await api(`/api/pl-projects/${encodeURIComponent(projectId)}?role=${encodeURIComponent(role)}`), role); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } };
+  await load();
+  document.querySelector('#submit-pl-issue').addEventListener('click', async () => { try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/issues`, {method:'POST', body:JSON.stringify({role, category:document.querySelector('#pl-issue-category').value, priority:document.querySelector('#pl-issue-priority').value, title:document.querySelector('#pl-issue-title').value.trim(), detail:document.querySelector('#pl-issue-detail').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', 'Issue 已提交给 PL。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
+  document.querySelector('#submit-pl-review').addEventListener('click', async () => { try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/reviews`, {method:'POST', body:JSON.stringify({role, conclusion:document.querySelector('#pl-review-conclusion').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', '评审结论已提交，等待 PL 确认。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
+  document.querySelector('#pl-my-issues').addEventListener('click', async event => { const button = event.target.closest('[data-pl-issue-confirm]'); if (!button) return; try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/issues/${button.dataset.plIssueConfirm}/confirm`, {method:'POST', body:JSON.stringify({role})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', 'Issue 已确认关闭。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
+}
+
+function isCurrentProject(link) {
+  return `${location.pathname.split('/').pop()}${location.search}` === link;
+}
+
+async function setupSidebarProjects() {
+  const nav = document.querySelector('#project-nav'); if (!nav) return;
+  try {
+    const role = currentRole();
+    const data = await api(`/api/overview?role=${encodeURIComponent(role)}`);
+    nav.innerHTML = data.projects.map(project => {
+      const link = projectLink(project, role);
+      return `<a href="${link}"${isCurrentProject(link) ? ' class="active" aria-current="page"' : ''}><span class="icon">▣</span>${project.name}</a>`;
+    }).join('');
+  } catch (_) { /* Keep Overview available when the local server is unavailable. */ }
+}
+
 function setupSidebar() {
   const sidebar = document.querySelector('.sidebar'); if (!sidebar) return;
   const toggle = document.createElement('button'); toggle.className = 'sidebar-toggle'; toggle.type = 'button'; toggle.setAttribute('aria-label', '折叠侧边栏'); toggle.textContent = '‹';
   toggle.addEventListener('click', () => { const collapsed = document.querySelector('.shell').classList.toggle('sidebar-collapsed'); toggle.textContent = collapsed ? '›' : '‹'; toggle.setAttribute('aria-label', collapsed ? '展开侧边栏' : '折叠侧边栏'); }); sidebar.append(toggle);
 }
 
-setupRoles(); setupWorkflow(); setupRoleWorkflow(); setupOverview(); setupIterationProject(); setupSidebar();
+setupRoles(); setupSidebarProjects(); setupWorkflow(); setupRoleWorkflow(); setupPlRoleReview(); setupOverview(); setupIterationProject(); setupSidebar();

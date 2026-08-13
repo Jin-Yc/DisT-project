@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DisT · Overview</title>
-<link rel="stylesheet" href="assets/app.css?v=7"><link rel="stylesheet" href="assets/ui-polish.css?v=8">
+<link rel="stylesheet" href="assets/app.css?v=8"><link rel="stylesheet" href="assets/ui-polish.css?v=31">
 </head>
 <body>
 <div class="shell">
@@ -15,11 +15,9 @@
 <nav class="nav">
 <a class="active" href="index.html">
 <span class="icon">▦</span>Overview</a>
-<a class="pl-only" href="workflow.html">
-<span class="icon">✦</span>PL 工作流</a>
-<a class="team-only" href="role-workflow.html">
-<span class="icon">✓</span>我的工作流</a>
 </nav>
+<p class="nav-label">PROJECTS</p>
+<nav class="nav project-nav" id="project-nav" aria-label="项目导航"></nav>
 <div class="sidebar-note">
 <b>Demo workspace</b>
 <br>本地规则与模拟 AI；所有结论均需人工确认。</div>
@@ -54,11 +52,10 @@
 <h1>项目组合总览</h1>
 <p class="subtitle">查看你参与的产品项目、当前阶段，以及需要优先处理的准备度风险。</p>
 </div>
-<a class="button pl-only" href="workflow.html">进入 PL 工作流 →</a>
-<a class="button team-only" href="role-workflow.html">查看我的工作流 →</a>
+<a class="button create-project pl-only" href="new-project.html">＋ 新建项目</a>
 </div>
 <section class="card team-workspace" id="team-workspace">
-<div class="card-head"><div><h2 id="team-workspace-title">我的角色工作台</h2><p id="team-workspace-desc">这里将显示分配给你的 O2O 评审和执行任务。</p></div><a class="text-link" href="role-workflow.html">查看工作流 →</a></div>
+<div class="card-head"><div><h2 id="team-workspace-title">我的角色工作台</h2><p id="team-workspace-desc">这里将显示 PL 新项目与既有项目的评审和执行任务。</p></div></div>
 <div id="team-task-list" class="team-task-list"></div>
 </section>
 <section class="metrics">
@@ -96,7 +93,6 @@
 <div class="gantt-header"><span>项目 / 工作项</span><span>7/14</span><span>7/21</span><span>7/28</span><span class="today-label">8/04</span><span>8/11</span><span>8/18</span><span>8/25</span><span>9/01</span></div>
 <div class="gantt-row"><div class="gantt-name"><b>RI</b><small>新产品 · Alice</small></div><div class="gantt-track"><i class="today-line"></i><span class="gantt-bar launch" style="left:3%;width:40%"><em style="width:72%"></em>问题定义</span><span class="gantt-milestone" style="left:44%" title="访谈复盘"></span><span class="gantt-bar review" style="left:48%;width:26%"><em style="width:28%"></em>需求准备</span></div></div>
 <div class="gantt-row"><div class="gantt-name"><b>Ecom</b><small>迭代 · Wei</small></div><div class="gantt-track"><i class="today-line"></i><span class="gantt-bar scope" style="left:18%;width:31%"><em style="width:88%"></em>Scope 定义</span><span class="gantt-milestone" style="left:51%" title="验收确认"></span><span class="gantt-bar delivery" style="left:55%;width:37%"><em style="width:12%"></em>开发准备</span></div></div>
-<div class="gantt-row"><div class="gantt-name"><b>O2O</b><small>新产品 · PL</small></div><div class="gantt-track"><i class="today-line"></i><span class="gantt-bar launch" style="left:6%;width:32%"><em style="width:56%"></em>需求澄清</span><span class="gantt-bar scope" style="left:42%;width:33%"><em style="width:0%"></em>Draft Spec</span><span class="gantt-milestone" style="left:77%" title="团队评审"></span></div></div>
 </div>
 <div class="legend">
 <span>
@@ -120,14 +116,6 @@
 <div>
 <h2>需要关注</h2>
 <p>按影响优先级排序</p>
-</div>
-</div>
-<div class="risk">
-<i class="risk-dot high">
-</i>
-<div>
-<b>O2O：数据覆盖未确认</b>
-<span>影响：不能确认首发市场与品类</span>
 </div>
 </div>
 <div class="risk">
@@ -158,14 +146,6 @@
 <i class="checkbox">
 </i>
 <div>
-<b>确认 O2O 首发范围</b>
-<span>今天 · 与数据团队</span>
-</div>
-</div>
-<div class="todo">
-<i class="checkbox">
-</i>
-<div>
 <b>确认 Ecom 的验收标准</b>
 <span>明天 · 评审前</span>
 </div>
@@ -187,7 +167,7 @@
 <h2>项目列表</h2>
 <p>从项目进入详情，使用对应阶段的工作流工具。</p>
 </div>
-<a class="text-link pl-only" href="workflow.html">进入工作流 →</a>
+<a class="text-link pl-only" href="new-project.html">新建项目 →</a>
 </div>
 <table class="project-table">
 <thead>
@@ -199,52 +179,12 @@
 <th>下一步</th>
 </tr>
 </thead>
-<tbody>
-<tr>
-<td>
-<a href="workflow.html">O2O</a>
-</td>
-<td>新产品 Launch</td>
-<td>
-<span class="tag amber">需求澄清中</span>
-</td>
-<td>
-<span class="tag red">1 个待处理问题</span>
-</td>
-<td>进入 PL 工作流</td>
-</tr>
-<tr>
-<td>
-Ecom
-</td>
-<td>现有产品迭代</td>
-<td>
-<span class="tag blue">Scope 定义</span>
-</td>
-<td>
-<span class="tag amber">需澄清</span>
-</td>
-<td>确认验收标准</td>
-</tr>
-<tr>
-<td>
-RI
-</td>
-<td>新产品 Launch</td>
-<td>
-<span class="tag blue">问题定义</span>
-</td>
-<td>
-<span class="tag green">持续收集</span>
-</td>
-<td>完成客户访谈</td>
-</tr>
-</tbody>
+<tbody></tbody>
 </table>
 </section>
 </main>
 </div>
 </div>
-<script src="assets/app.js?v=7"></script>
+<script src="assets/app.js?v=11"></script>
 </body>
 </html>

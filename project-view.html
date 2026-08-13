@@ -1,15 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DisT · 项目迭代概览</title><link rel="stylesheet" href="assets/app.css?v=7"><link rel="stylesheet" href="assets/ui-polish.css?v=8"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DisT · 项目迭代概览</title><link rel="stylesheet" href="assets/app.css?v=8"><link rel="stylesheet" href="assets/ui-polish.css?v=31"></head>
 <body><div class="shell">
 <aside class="sidebar"><div class="brand">DisT<small>PRODUCT READINESS PLATFORM</small></div>
-<p class="nav-label">WORKSPACE</p><nav class="nav"><a href="index.html"><span class="icon">▦</span>Overview</a><a class="pl-only" href="workflow.html"><span class="icon">✦</span>PL 工作流</a><a class="team-only" href="role-workflow.html"><span class="icon">✓</span>我的工作流</a></nav>
+<p class="nav-label">WORKSPACE</p><nav class="nav"><a href="index.html"><span class="icon">▦</span>Overview</a></nav>
+<p class="nav-label">PROJECTS</p><nav class="nav project-nav" id="project-nav" aria-label="项目导航"></nav>
 <div class="sidebar-note"><b id="iteration-sidebar-name">项目迭代</b><br>仅供查看的模拟项目<br><span class="tag blue" id="iteration-sidebar-stage" style="margin-top:8px">加载中</span></div>
 <div class="user-menu"><div class="user-profile"><span class="avatar" id="role-avatar">PL</span><div><b id="role-name">PL</b><small>当前角色</small></div></div><label class="role-picker" for="role-select">切换角色<select id="role-select"><option value="PL">PL</option><option value="Dsci">Dsci</option><option value="DA & RV">DA &amp; RV</option><option value="Ops">Ops</option></select></label></div></aside>
 <div class="page"><header class="topbar"><div class="crumb"><a href="index.html" style="color:inherit">Overview</a> / <b>项目迭代概览</b></div><span class="tag blue" id="topbar-role">PL</span></header>
 <main class="content" id="iteration-project-app"><section class="detail-head"><p class="eyebrow">Existing product · iteration snapshot</p><h1 id="iteration-project-name">项目迭代概览</h1><p class="subtitle" id="iteration-project-objective">加载项目状态中…</p><div class="detail-meta"><span class="tag purple" id="iteration-project-version">迭代中</span><span class="tag amber" id="iteration-project-stage">加载中</span><span class="tag blue">只读模拟</span></div><p class="workflow-feedback" id="iteration-feedback" aria-live="polite"></p></section>
-<section class="tool-banner"><span class="avatar">↻</span><div><strong>存量项目迭代</strong><span>这个项目已进入迭代阶段；用于查看当前目标、边界、风险和各团队的工作，不重复 O2O 的从零启动流程。</span></div><a class="text-link" href="index.html">返回项目组合 →</a></section>
+<section class="tool-banner"><span class="avatar">↻</span><div><strong>存量项目迭代</strong><span>这个项目已进入迭代阶段；用于查看当前目标、边界、风险和各团队的工作，不重复新项目的从零启动流程。</span></div><a class="text-link" href="index.html">返回项目组合 →</a></section>
 <div class="spec-layout"><section class="card"><h2>本轮迭代范围</h2><div class="summary-item"><b>当前目标</b><span id="iteration-objective"></span></div><div class="summary-item"><b>本轮范围</b><span id="iteration-scope"></span></div><div class="summary-item"><b>当前风险</b><span id="iteration-risk"></span></div></section><aside class="card"><h2>查看说明</h2><div class="check"><b>这是模拟快照</b>可切换项目和角色查看对应工作，不会改变模拟项目状态。</div></aside></div>
 <section class="card"><div class="card-head"><div><h2>跨团队迭代排期</h2><p>显示当前迭代中各团队的分工与截止时间。</p></div></div><div class="team-task-list" id="iteration-task-list"></div></section>
 <section class="card team-workspace" id="iteration-my-work"><div class="card-head"><div><h2>我的迭代工作</h2><p>该项目为查看型模拟，任务状态不在此页面修改。</p></div></div><div class="team-task-list" id="iteration-my-task"></div></section>
-</main></div></div><script src="assets/app.js?v=7"></script></body></html>
+</main></div></div><script src="assets/app.js?v=11"></script></body></html>

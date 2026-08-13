@@ -204,6 +204,28 @@ def build_app(database_path: Path | None = None) -> Flask:
             project["my_issues"] = [item for item in project["issues"] if item["owner_role"] == role]
         return project
 
+    def pl_pending_project(project: dict) -> dict:
+        phase = project["review_phase"]
+        first_review_ready = all(task["status"] == "submitted" for task in project["first_review_tasks"].values())
+        final_review_ready = all(task["status"] == "submitted" for task in project["final_review_tasks"].values())
+        leader_check_ready = all(check["confirmed"] for check in project["leader_checks"].values())
+        action = {
+            "initial_review": "启动会议" if first_review_ready else "等待三方首次评审",
+            "meeting": "更新报告并发起最终评审",
+            "final_review": "完成最终评审" if final_review_ready else "查看最终评审进度",
+            "final_complete": "确认项目" if leader_check_ready else "等待 Leader Check",
+        }[phase]
+        return {
+            "kind": "PL 新项目",
+            "project_id": project["id"],
+            "project": project["name"],
+            "title": f"{project['name']}：{action}",
+            "phase": phase,
+            "action": action,
+            "state": project["stage"],
+            "status": project["readiness"],
+        }
+
     def step_index(state: dict) -> int:
         return STEPS.index(state["stage"])
 
@@ -374,7 +396,8 @@ def build_app(database_path: Path | None = None) -> Flask:
         confirmed_pl_projects = [item for item in pl_projects if item.get("confirmed")]
         projects.extend({"id": item["id"], "name": item["name"], "type": "PL 新项目", "stage": item["stage"], "readiness": item["readiness"], "next": "查看项目概览", "pl_project": True} for item in confirmed_pl_projects)
         if role == "PL":
-            return jsonify({"projects": projects, "role": role})
+            pending_projects = [pl_pending_project(item) for item in pl_projects if not item.get("confirmed")]
+            return jsonify({"projects": projects, "role": role, "pending_projects": pending_projects})
         if role not in TEAM_ROLES:
             return error("未识别的角色。", 400)
         tasks = [
@@ -392,6 +415,10 @@ def build_app(database_path: Path | None = None) -> Flask:
                 action = "提交首次评审（可确认无 Issue）" if phase == "initial_review" else "确认会议项已解决并提交最终结论"
                 tasks.append({"kind": "PL 新项目", "title": f"{project['name']}：{action}", "status": task["status"],
                               "phase": phase, "action": action, "state": project["stage"], "due_date": "待处理",
+                              "project": project["name"], "project_id": project["id"], "pl_project": True})
+            if phase == "final_complete" and not project["leader_checks"][role]["confirmed"]:
+                tasks.append({"kind": "PL 新项目", "title": f"{project['name']}：完成 Leader Check", "status": "pending",
+                              "phase": phase, "action": "确认最终方案", "state": project["stage"], "due_date": "待处理",
                               "project": project["name"], "project_id": project["id"], "pl_project": True})
         return jsonify({"projects": projects, "role": role, "role_focus": ROLE_FOCUS[role], "tasks": tasks})
 

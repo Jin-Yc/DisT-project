@@ -63,6 +63,10 @@ class WorkflowApiTest(unittest.TestCase):
         names = [item["name"] for item in self.client.get("/api/overview").get_json()["projects"]]
         self.assertEqual(names, ["RI", "Ecom"])
         self.post("/api/pl-projects", {"id": "pl-demo", "context": {"productName": "门店洞察"}})
+        pl_overview = self.client.get("/api/overview?role=PL").get_json()
+        self.assertNotIn("门店洞察", [item["name"] for item in pl_overview["projects"]])
+        self.assertEqual(pl_overview["pending_projects"][0]["project_id"], "pl-demo")
+        self.assertEqual(pl_overview["pending_projects"][0]["action"], "等待三方首次评审")
         overview = self.client.get("/api/overview?role=Dsci").get_json()
         self.assertNotIn("门店洞察", [item["name"] for item in overview["projects"]])
         task = next(item for item in overview["tasks"] if item["project_id"] == "pl-demo")
@@ -76,16 +80,33 @@ class WorkflowApiTest(unittest.TestCase):
             self.assertIn("首次评审", role_task["action"])
         for role in ("Dsci", "DA & RV", "Ops"):
             self.post("/api/pl-projects/pl-demo/reviews", {"role": role, "conclusion": f"{role} 评审通过。"})
+        pl_overview = self.client.get("/api/overview?role=PL").get_json()
+        self.assertEqual(pl_overview["pending_projects"][0]["action"], "启动会议")
         self.post("/api/pl-projects/pl-demo/meeting/start")
         self.post("/api/pl-projects/pl-demo/meeting", {"minutes": "会议确认范围、数据与风险。"})
+        pl_overview = self.client.get("/api/overview?role=PL").get_json()
+        self.assertEqual(pl_overview["pending_projects"][0]["phase"], "final_review")
+        self.assertEqual(pl_overview["pending_projects"][0]["action"], "查看最终评审进度")
         for role in ("Dsci", "DA & RV", "Ops"):
             self.post("/api/pl-projects/pl-demo/final-reviews", {"role": role, "conclusion": f"{role} 最终通过。"})
+        self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "完成最终评审")
         self.post("/api/pl-projects/pl-demo/final-reviews/complete")
-        for role in ("PL", "Dsci", "DA & RV", "Ops"):
+        self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "等待 Leader Check")
+        for role in ("Dsci", "DA & RV", "Ops"):
+            task = next(item for item in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"] if item["project_id"] == "pl-demo")
+            self.assertEqual(task["phase"], "final_complete")
+            self.assertEqual(task["action"], "确认最终方案")
+        self.post("/api/pl-projects/pl-demo/leader-checks", {"role": "Dsci", "confirmed": True})
+        dsci_tasks = self.client.get("/api/overview", query_string={"role": "Dsci"}).get_json()["tasks"]
+        self.assertNotIn("pl-demo", [task["project_id"] for task in dsci_tasks])
+        self.assertIn("pl-demo", [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": "Ops"}).get_json()["tasks"]])
+        for role in ("PL", "DA & RV", "Ops"):
             self.post("/api/pl-projects/pl-demo/leader-checks", {"role": role, "confirmed": True})
+        self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "确认项目")
         self.post("/api/pl-projects/pl-demo/confirm")
         confirmed = self.client.get("/api/overview").get_json()
         self.assertIn("门店洞察", [item["name"] for item in confirmed["projects"]])
+        self.assertEqual(confirmed["pending_projects"], [])
 
     def test_pl_can_revoke_unconfirmed_projects_and_their_team_tasks(self):
         o2o_stage = self.client.get("/api/o2o").get_json()["stage"]

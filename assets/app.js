@@ -31,16 +31,7 @@ function setupRoles() {
   document.querySelectorAll('#role-select').forEach(select => select.addEventListener('change', event => {
     const role = event.target.value;
     applyRole(role);
-    if (location.pathname.endsWith('/role-workflow.html') && teamRoles.includes(role)) {
-      location.href = 'role-workflow.html';
-      return;
-    }
-    if (location.pathname.endsWith('/project-view.html')) {
-      location.reload();
-      return;
-    }
-    setupSidebarProjects();
-    if (document.querySelector('#projects')) setupOverview();
+    location.href = 'index.html';
   }));
 }
 
@@ -233,10 +224,17 @@ async function setupOverview() {
       return `<tr><td><a href="${link}">${escapeHtml(project.name)}</a></td><td>${escapeHtml(project.type)}</td><td><span class="tag ${project.pl_project ? 'amber' : 'blue'}">${escapeHtml(project.stage)}</span></td><td><span class="tag ${project.readiness.includes('待处理') || project.readiness.includes('风险') ? 'red' : 'amber'}">${escapeHtml(project.readiness)}</span></td><td>${escapeHtml(project.next)}</td></tr>`;
     }).join('');
     const workspace = document.querySelector('#team-workspace');
-    if (role !== 'PL' && workspace) {
-      document.querySelector('#team-workspace-title').textContent = `${role} 的工作台`;
-      document.querySelector('#team-workspace-desc').textContent = data.tasks.length ? '以下任务区分既有项目与 PL 新项目；请按工作指示完成评审或执行。' : `PL 尚未向 ${role} 分配新项目任务。`;
-      document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => task.pl_project ? `<a class="team-task task-link" href="role-review.html?project=${encodeURIComponent(task.project_id)}"><span class="tag amber">PL 新项目 · ${escapeHtml(task.project)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(task.action || task.status)} · 点击完成当前角色操作</span></a>` : `<a class="team-task task-link" href="project-view.html?project=${encodeURIComponent(task.project_id)}"><span class="tag blue">${escapeHtml(task.kind)} · ${escapeHtml(task.project)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(statusText(task.status))} · 查看项目</span></a>`).join('') : '<div class="empty">暂无待处理任务。</div>';
+    if (workspace) {
+      if (role === 'PL') {
+        const pendingProjects = data.pending_projects || [];
+        document.querySelector('#team-workspace-title').textContent = 'PL 工作台';
+        document.querySelector('#team-workspace-desc').textContent = pendingProjects.length ? '以下未确认项目保存在服务器中；选择项目后可继续当前阶段。' : '暂无需要继续处理的未确认项目。';
+        document.querySelector('#team-task-list').innerHTML = pendingProjects.length ? pendingProjects.map(project => `<a class="team-task task-link" href="new-project.html?project_id=${encodeURIComponent(project.project_id)}"><span class="tag amber">PL 新项目 · ${escapeHtml(project.project)}</span><b>${escapeHtml(project.title)}</b><span>${escapeHtml(project.action)} · ${escapeHtml(project.status)}</span></a>`).join('') : '<div class="empty">暂无待处理任务。</div>';
+      } else {
+        document.querySelector('#team-workspace-title').textContent = `${role} 的工作台`;
+        document.querySelector('#team-workspace-desc').textContent = data.tasks.length ? '以下任务区分既有项目与 PL 新项目；请按工作指示完成评审或执行。' : `PL 尚未向 ${role} 分配新项目任务。`;
+        document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => task.pl_project ? `<a class="team-task task-link" href="${task.phase === 'final_complete' ? `new-project.html?project_id=${encodeURIComponent(task.project_id)}` : `role-review.html?project=${encodeURIComponent(task.project_id)}`}"><span class="tag amber">PL 新项目 · ${escapeHtml(task.project)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(task.action || task.status)} · 点击完成当前角色操作</span></a>` : `<a class="team-task task-link" href="project-view.html?project=${encodeURIComponent(task.project_id)}"><span class="tag blue">${escapeHtml(task.kind)} · ${escapeHtml(task.project)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(statusText(task.status))} · 查看项目</span></a>`).join('') : '<div class="empty">暂无待处理任务。</div>';
+      }
     }
   } catch (error) {
     setFeedback('#team-task-list', `无法加载团队工作台：${error.message}`, true);
@@ -282,18 +280,24 @@ function renderPlRoleReview(state, role) {
   document.querySelector('#role-review-role').textContent = role;
   document.querySelector('#role-review-focus').textContent = state.role_focus;
   const finalPlan = state.final_plan || {};
+  const planText = (...values) => values.flat().filter(value => value != null && value !== '').join('； ') || '未提供';
   document.querySelector('#role-review-background').textContent = finalPlan.positioning?.background || state.context?.projectDesc || state.name;
+  document.querySelector('#role-review-report-label').textContent = state.review_phase === 'final_review' ? '更新报告关键内容' : '初版报告说明';
   document.querySelector('#role-review-report').textContent = state.review_phase === 'final_review' ? `报告 v${state.report_version}：${(state.minutes_updates || []).join('； ') || '会议更新已持久化。'}` : '初版报告：请重点检查背景、范围、数据与交付假设。';
+  document.querySelector('#role-review-positioning').textContent = planText(finalPlan.positioning?.target, finalPlan.positioning?.pain, finalPlan.positioning?.value, finalPlan.positioning?.pitch);
+  document.querySelector('#role-review-scope').textContent = planText(finalPlan.scope?.inScope, finalPlan.scope?.outScope);
+  document.querySelector('#role-review-business').textContent = planText(finalPlan.business?.data, finalPlan.business?.metrics, finalPlan.business?.delivery, finalPlan.business?.roles);
+  document.querySelector('#role-review-risks').textContent = planText(finalPlan.risks?.risks, finalPlan.risks?.dependencies, finalPlan.risks?.assumptions, finalPlan.risks?.pending);
   document.querySelector('#role-review-phase').textContent = ({initial_review:'首次评审：可提交 Issue 或确认无 Issue 后提交结论。', meeting:'会议进行中：等待 PL 更新报告。', final_review:'最终评审：请先确认本人会议项已解决，再提交最终结论。', final_complete:'最终评审已完成，等待 Leader Check。'})[state.review_phase] || state.stage;
   document.querySelector('#role-review-instruction').textContent = state.team_instructions[role];
   const task = state.review_phase === 'final_review' ? state.final_review_tasks?.[role] : state.first_review_tasks?.[role] || state.role_review_task || {};
   document.querySelector('#role-review-task-status').textContent = statusText(task.status || 'pending');
   const firstRound = state.review_phase === 'initial_review', finalRound = state.review_phase === 'final_review';
   document.querySelectorAll('#role-review-app input,#role-review-app select,#role-review-app textarea,#submit-pl-issue,#submit-pl-review').forEach(node => node.disabled = task.status !== 'pending');
-  document.querySelector('#submit-pl-issue').hidden = !firstRound;
+  document.querySelector('#initial-review-issue-form').hidden = !firstRound;
   document.querySelector('#submit-pl-review').textContent = finalRound ? '提交最终结论 →' : '完成首次评审 →';
   const issues = state.my_issues || [];
-  document.querySelector('#pl-my-issues').innerHTML = issues.length ? issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${escapeHtml(issue.title)} · ${escapeHtml(statusText(issue.status))}</b><span>${escapeHtml(issue.detail)}</span>${issue.pl_response ? `<span><b>PL 回复：</b>${escapeHtml(issue.pl_response)}</span>` : ''}${issue.status === 'awaiting_submitter' ? `<button class="text-link" data-pl-issue-confirm="${issue.id}">确认直接回复已解决</button>` : ''}${issue.status === 'meeting_required' && state.review_phase === 'final_review' ? `<button class="text-link" data-pl-issue-confirm="${issue.id}">确认会议项已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
+  document.querySelector('#pl-my-issues').innerHTML = issues.length ? issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${escapeHtml(issue.title)} · ${escapeHtml(statusText(issue.status))}</b><span>${escapeHtml(issue.detail)}</span>${issue.pl_response ? `<span><b>PL 回复：</b>${escapeHtml(issue.pl_response)}</span>` : ''}${issue.status === 'awaiting_submitter' ? `<button class="button secondary issue-confirm-action" type="button" data-pl-issue-confirm="${issue.id}">确认直接回复已解决</button>` : ''}${issue.status === 'meeting_required' && state.review_phase === 'final_review' ? `<button class="button secondary issue-confirm-action" type="button" data-pl-issue-confirm="${issue.id}">确认会议项已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
 }
 
 async function setupPlRoleReview() {

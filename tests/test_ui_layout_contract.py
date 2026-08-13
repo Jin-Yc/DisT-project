@@ -37,7 +37,14 @@ class UiLayoutContractTest(unittest.TestCase):
         self.assertIn("final-reviews", app_js)
         self.assertIn("meeting_required", new_project_js)
         self.assertIn("meeting/start", new_project_js)
-        self.assertIn("更新报告关键内容", review)
+        self.assertIn('id="role-review-plan-spec-title">待评审方案规格', review)
+        for section_id in ("role-review-positioning", "role-review-scope", "role-review-business", "role-review-risks"):
+            self.assertIn(f'id="{section_id}"', review)
+        self.assertIn('id="initial-review-issue-form"', review)
+        self.assertIn("role-review-report-label", app_js)
+        self.assertIn("textContent = planText", app_js)
+        self.assertIn('class="button secondary issue-confirm-action"', app_js)
+        self.assertIn("initial-review-issue-form').hidden = !firstRound", app_js)
 
     def test_initial_review_distribution_and_explicit_flow_recovery_are_wired(self):
         page = (ROOT / "new-project.html").read_text(encoding="utf-8")
@@ -62,12 +69,31 @@ class UiLayoutContractTest(unittest.TestCase):
 
     def test_team_overview_keeps_review_links_and_surfaces_load_errors(self):
         app_js = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")
-        self.assertIn('href="role-review.html?project=${encodeURIComponent(task.project_id)}"', app_js)
+        app_css = (ROOT / "assets" / "app.css").read_text(encoding="utf-8")
+        self.assertIn("task.phase === 'final_complete'", app_js)
+        self.assertIn("role-review.html?project=${encodeURIComponent(task.project_id)}", app_js)
+        self.assertIn("new-project.html?project_id=${encodeURIComponent(task.project_id)}", app_js)
+        self.assertIn("pending_projects", app_js)
+        self.assertIn('href="new-project.html?project_id=${encodeURIComponent(project.project_id)}"', app_js)
+        self.assertNotIn(".role-pl .team-workspace{display:none}", app_css)
         self.assertIn("setFeedback('#team-task-list', `无法加载团队工作台：${error.message}`, true)", app_js)
+
+    def test_role_changes_return_to_overview_and_pl_projects_restore_their_phase(self):
+        app_js = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")
+        new_project_js = (ROOT / "assets" / "new-project.js").read_text(encoding="utf-8")
+        self.assertIn("applyRole(role);\n    location.href = 'index.html';", app_js)
+        self.assertNotIn("location.reload()", app_js)
+        self.assertIn("({initial_review:'review', meeting:'report', final_review:'review', final_complete:'detail'})", new_project_js)
 
     def test_adjacent_top_level_cards_have_a_defined_gap(self):
         css = (ROOT / "assets" / "ui-polish.css").read_text(encoding="utf-8")
         self.assertIn(".content>.spec-layout+.card,.content>.spec-layout+.role-work-card,.content>.card+.card{margin-top:22px}", css)
+        self.assertIn("#report-content+.creator-distribution-card,#report-content+.creator-minutes-card{max-width:1180px;margin-top:18px}", css)
+        self.assertIn(".role-review-layout{align-items:start;gap:24px}", css)
+        self.assertIn(".role-review-layout>.card>.review-focus{border-bottom:0;padding-bottom:0}", css)
+        self.assertIn(".role-review-layout #initial-review-issue-form+.input-label{display:block;margin-top:24px", css)
+        self.assertIn(".creator-project-tools{display:flex;width:min(100%,1180px)", css)
+        self.assertIn(".creator-tabs{display:flex;width:min(100%,1180px)", css)
 
     def test_role_workflow_controls_have_defined_vertical_spacing(self):
         css = (ROOT / "assets" / "ui-polish.css").read_text(encoding="utf-8")

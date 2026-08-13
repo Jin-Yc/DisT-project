@@ -68,24 +68,138 @@ class WorkflowApiTest(unittest.TestCase):
         task = next(item for item in overview["tasks"] if item["project_id"] == "pl-demo")
         self.assertEqual(task["kind"], "PL 新项目")
         self.assertIn("门店洞察", task["title"])
+        self.assertEqual(task["phase"], "initial_review")
+        self.assertIn("首次评审", task["action"])
+        for role in ("Dsci", "DA & RV", "Ops"):
+            role_task = next(item for item in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"] if item["project_id"] == "pl-demo")
+            self.assertEqual(role_task["phase"], "initial_review")
+            self.assertIn("首次评审", role_task["action"])
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-demo/reviews", {"role": role, "conclusion": f"{role} 评审通过。"})
+        self.post("/api/pl-projects/pl-demo/meeting/start")
+        self.post("/api/pl-projects/pl-demo/meeting", {"minutes": "会议确认范围、数据与风险。"})
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-demo/final-reviews", {"role": role, "conclusion": f"{role} 最终通过。"})
+        self.post("/api/pl-projects/pl-demo/final-reviews/complete")
+        for role in ("PL", "Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-demo/leader-checks", {"role": role, "confirmed": True})
         self.post("/api/pl-projects/pl-demo/confirm")
         confirmed = self.client.get("/api/overview").get_json()
         self.assertIn("门店洞察", [item["name"] for item in confirmed["projects"]])
 
-    def test_pl_project_issue_requires_owner_confirmation_before_review(self):
+    def test_pl_can_revoke_unconfirmed_projects_and_their_team_tasks(self):
+        o2o_stage = self.client.get("/api/o2o").get_json()["stage"]
+        self.post("/api/pl-projects", {"id": "discard-me", "context": {"productName": "待撤销方案"}})
+        for role in ("Dsci", "DA & RV", "Ops"):
+            task_ids = [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"]]
+            self.assertIn("discard-me", task_ids)
+
+        denied = self.client.delete("/api/pl-projects/unconfirmed?role=Dsci")
+        self.assertEqual(denied.status_code, 403, denied.get_json())
+
+        self.post("/api/pl-projects", {"id": "keep-me", "context": {"productName": "已确认方案"}})
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/keep-me/reviews", {"role": role, "conclusion": "首次评审通过。"})
+        self.post("/api/pl-projects/keep-me/meeting/start")
+        self.post("/api/pl-projects/keep-me/meeting", {"minutes": "会议确认方案。"})
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/keep-me/final-reviews", {"role": role, "conclusion": "最终评审通过。"})
+        self.post("/api/pl-projects/keep-me/final-reviews/complete")
+        for role in ("PL", "Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/keep-me/leader-checks", {"role": role, "confirmed": True})
+        self.assertTrue(self.post("/api/pl-projects/keep-me/confirm")["confirmed"])
+
+        response = self.client.delete("/api/pl-projects/unconfirmed", json={"role": "PL"})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["deleted_count"], 1)
+        self.assertEqual(self.client.get("/api/pl-projects/discard-me?role=PL").status_code, 404)
+        self.assertEqual(self.client.get("/api/pl-projects/keep-me?role=PL").status_code, 200)
+        for role in ("Dsci", "DA & RV", "Ops"):
+            task_ids = [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"]]
+            self.assertNotIn("discard-me", task_ids)
+        self.assertEqual(self.client.get("/api/o2o").get_json()["stage"], o2o_stage)
+
+    def test_pl_project_meeting_required_issue_and_gates(self):
         self.post("/api/pl-projects", {"id": "pl-review", "context": {"productName": "门店洞察"}})
         issue = self.post("/api/pl-projects/pl-review/issues", {"role": "Dsci", "category": "Scope", "priority": "高", "title": "确认试点范围", "detail": "需要明确首发门店范围。"})
         self.assertEqual(issue["my_issues"][0]["status"], "open")
         self.post("/api/pl-projects/pl-review/reviews", {"role": "Dsci", "conclusion": "可以进入下一步。"}, expected=409)
-        self.post("/api/pl-projects/pl-review/issues/1/respond", {"response": "首发仅覆盖华东试点门店。"})
+        self.post("/api/pl-projects/pl-review/issues/1/respond", {"response": "需与数据团队会议确认。", "action": "meeting_required"})
+        self.post("/api/pl-projects/pl-review/meeting/start", expected=409)
+        self.post("/api/pl-projects/pl-review/issues/1/confirm", {"role": "Dsci"}, expected=409)
+        self.post("/api/pl-projects/pl-review/reviews", {"role": "Dsci", "conclusion": "范围需会议解决。"})
+        for role in ("DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-review/reviews", {"role": role, "conclusion": f"{role} 首轮通过。"})
+        started = self.post("/api/pl-projects/pl-review/meeting/start")
+        self.assertEqual(started["review_phase"], "meeting")
+        self.post("/api/pl-projects/pl-review/final-reviews", {"role": "Dsci", "conclusion": "不应跳过会议"}, expected=409)
+        updated = self.post("/api/pl-projects/pl-review/meeting", {"minutes": "会议确认华东试点范围与数据字段。"})
+        self.assertEqual(updated["review_phase"], "final_review")
+        self.assertEqual(updated["report_version"], 2)
+        self.assertTrue(updated["minutes_updates"])
+        self.post("/api/pl-projects/pl-review/final-reviews", {"role": "Dsci", "conclusion": "未确认会议项"}, expected=409)
         closed = self.post("/api/pl-projects/pl-review/issues/1/confirm", {"role": "Dsci"})
         self.assertEqual(closed["my_issues"][0]["status"], "closed")
-        reviewed = self.post("/api/pl-projects/pl-review/reviews", {"role": "Dsci", "conclusion": "范围明确，可以进入下一步。"})
-        self.assertEqual(reviewed["role_review_task"]["status"], "awaiting_pl_confirmation")
+        self.post("/api/pl-projects/pl-review/final-reviews", {"role": "Dsci", "conclusion": "范围明确。"})
         for role in ("DA & RV", "Ops"):
-            self.post("/api/pl-projects/pl-review/reviews", {"role": role, "conclusion": f"{role} 评审通过。"})
-        completed = self.post("/api/pl-projects/pl-review/reviews/complete")
-        self.assertEqual(completed["stage"], "等待 PL 确认")
+            self.post("/api/pl-projects/pl-review/final-reviews", {"role": role, "conclusion": f"{role} 最终通过。"})
+        completed = self.post("/api/pl-projects/pl-review/final-reviews/complete")
+        self.assertEqual(completed["review_phase"], "final_complete")
+
+    def test_pl_project_direct_reply_and_final_confirmation(self):
+        self.post("/api/pl-projects", {"id": "pl-direct", "context": {"productName": "门店洞察"}})
+        issue = self.post("/api/pl-projects/pl-direct/issues", {"role": "Dsci", "category": "Scope", "priority": "高", "title": "确认试点范围", "detail": "需要明确首发门店范围。"})
+        self.assertEqual(issue["my_issues"][0]["status"], "open")
+        self.post("/api/pl-projects/pl-direct/issues/1/respond", {"response": "首发仅覆盖华东试点门店。", "action": "direct"})
+        closed = self.post("/api/pl-projects/pl-direct/issues/1/confirm", {"role": "Dsci"})
+        self.assertEqual(closed["my_issues"][0]["status"], "closed")
+        self.post("/api/pl-projects/pl-direct/reviews", {"role": "Dsci", "conclusion": "范围明确。"})
+        for role in ("DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-direct/reviews", {"role": role, "conclusion": f"{role} 首轮通过。"})
+        self.post("/api/pl-projects/pl-direct/meeting/start")
+        self.post("/api/pl-projects/pl-direct/meeting", {"minutes": "会议确认最终方案。"})
+        self.post("/api/pl-projects/pl-direct/final-reviews/complete", expected=409)
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-direct/final-reviews", {"role": role, "conclusion": "最终同意。"})
+        self.post("/api/pl-projects/pl-direct/final-reviews/complete")
+        self.post("/api/pl-projects/pl-direct/leader-checks", {"role": "PL", "confirmed": True})
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-direct/leader-checks", {"role": role, "confirmed": True})
+        self.assertTrue(self.post("/api/pl-projects/pl-direct/confirm")["confirmed"])
+
+    def test_pl_project_persists_full_final_detail_and_rejects_gate_bypass(self):
+        payload = {
+            "id": "pl-final", "context": {"productName": "门店洞察", "projectDesc": "测试背景"},
+            "finalPlan": {"positioning": {"background": "最终背景"}, "actions": ["冻结范围"]},
+            "minutes": "最终会议纪要", "minutesAnalysis": "纪要分析", "minutesUpdates": ["更新范围"],
+        }
+        created = self.post("/api/pl-projects", payload)
+        self.assertEqual(created["leader_checks"]["PL"]["confirmed"], False)
+        self.post("/api/pl-projects/pl-final/confirm", expected=409)
+        self.post("/api/pl-projects/pl-final/issues", {"role": "Dsci", "title": "范围", "detail": "需要确认"})
+        self.post("/api/pl-projects/pl-final/issues/1/respond", {"response": "已补充", "action": "direct"})
+        self.post("/api/pl-projects/pl-final/issues/1/confirm", {"role": "Ops"}, expected=403)
+        self.post("/api/pl-projects/pl-final/issues/1/confirm", {"role": "Dsci"})
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-final/reviews", {"role": role, "conclusion": "同意进入确认"})
+        self.post("/api/pl-projects/pl-final/meeting/start")
+        self.post("/api/pl-projects/pl-final/meeting", {"minutes": "会议确认方案与范围。"})
+        self.post("/api/pl-projects/pl-final/reviews", {"role": "Dsci", "conclusion": "再次提交"}, expected=409)
+        self.post("/api/pl-projects/pl-final/issues", {"role": "Dsci", "title": "不应创建", "detail": "阶段错误"}, expected=409)
+        self.post("/api/pl-projects/pl-final/leader-checks", {"role": "PL", "confirmed": True}, expected=409)
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-final/final-reviews", {"role": role, "conclusion": "最终同意"})
+        self.post("/api/pl-projects/pl-final/final-reviews/complete")
+        for role in ("PL", "Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-final/leader-checks", {"role": role, "confirmed": True})
+        self.post("/api/pl-projects/pl-final/leader-checks", {"role": "未知", "confirmed": True}, expected=400)
+        self.post("/api/pl-projects/pl-final/confirm")
+        self.post("/api/pl-projects/pl-final/leader-checks", {"role": "PL", "confirmed": True}, expected=409)
+        detail = self.client.get("/api/pl-projects/pl-final?role=PL").get_json()
+        self.assertEqual(detail["context"]["projectDesc"], "测试背景")
+        self.assertEqual(detail["final_plan"]["positioning"]["background"], "最终背景")
+        self.assertTrue(detail["minutes_updates"])
+        self.assertTrue(all(detail["leader_checks"][role]["confirmed"] for role in ("PL", "Dsci", "DA & RV", "Ops")))
 
     def test_role_review_page_is_served(self):
         response = self.client.get("/role-review.html")

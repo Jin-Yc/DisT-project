@@ -143,18 +143,60 @@ def build_app(database_path: Path | None = None) -> Flask:
     def read_pl_projects() -> list[dict]:
         with connection() as db:
             rows = db.execute("SELECT payload FROM pl_project_state ORDER BY rowid DESC").fetchall()
-        return [item for item in (json.loads(row["payload"]) for row in rows) if item.get("id") != "o2o" and item.get("name") != "O2O"]
+        return [normalise_pl_project(item) for item in (json.loads(row["payload"]) for row in rows) if item.get("id") != "o2o" and item.get("name") != "O2O"]
 
     def write_pl_project(state: dict) -> dict:
+        state = normalise_pl_project(state)
         with connection() as db:
             db.execute("INSERT OR REPLACE INTO pl_project_state VALUES (?, ?)", (state["id"], json.dumps(state, ensure_ascii=False)))
         return state
 
+    def normalise_pl_project(state: dict) -> dict:
+        """Keep previously saved proposal payloads safe to consume as full records."""
+        state.setdefault("context", {})
+        state.setdefault("final_plan", {})
+        state.setdefault("minutes", "")
+        state.setdefault("minutes_analysis", "")
+        state.setdefault("minutes_updates", [])
+        state.setdefault("team_instructions", {
+            role: f"评审 {state.get('name', '当前项目')} 的最终方案：重点确认 {ROLE_FOCUS[role]}。"
+            for role in TEAM_ROLES
+        })
+        state.setdefault("issues", [])
+        # Old payloads had one review task collection and jumped directly to
+        # Leader Check.  Preserve those records as a completed final round,
+        # while all newly created projects use the explicit two-round flow.
+        legacy_tasks = state.setdefault("review_tasks", {})
+        if "review_phase" not in state:
+            state["review_phase"] = "final_complete" if state.get("stage") == "等待 PL 确认" else "initial_review"
+        state.setdefault("report_version", 1)
+        state.setdefault("meeting_started", False)
+        state.setdefault("meeting_items_recorded", False)
+        state.setdefault("first_review_tasks", copy.deepcopy(legacy_tasks))
+        state.setdefault("final_review_tasks", copy.deepcopy(legacy_tasks) if state["review_phase"] == "final_complete" else {})
+        for role in TEAM_ROLES:
+            state["first_review_tasks"].setdefault(role, {"status": "pending", "conclusion": ""})
+            state["final_review_tasks"].setdefault(role, {"status": "pending", "conclusion": ""})
+        # review_tasks remains a compatible view for existing consumers.
+        state["review_tasks"] = state["final_review_tasks"] if state["review_phase"] in {"final_review", "final_complete"} else state["first_review_tasks"]
+        for issue in state["issues"]:
+            issue.setdefault("resolution", "direct")
+            if issue.get("status") == "awaiting_submitter":
+                issue["resolution"] = "direct"
+            if issue.get("status") == "meeting_required":
+                issue["resolution"] = "meeting_required"
+        checks = state.setdefault("leader_checks", {})
+        for role in ("PL", *TEAM_ROLES):
+            checks.setdefault(role, {"viewed": False, "confirmed": False, "note": ""})
+        state.setdefault("confirmed", False)
+        state.setdefault("stage", "团队评审中")
+        state.setdefault("readiness", "等待团队评审")
+        return state
+
     def public_pl_project(state: dict, role: str | None = None) -> dict:
-        project = copy.deepcopy(state)
-        project.setdefault("issues", [])
-        project.setdefault("review_tasks", {team: {"status": "pending", "conclusion": ""} for team in TEAM_ROLES})
-        project["open_issue_count"] = sum(item["status"] in {"open", "awaiting_submitter"} for item in project["issues"])
+        project = copy.deepcopy(normalise_pl_project(state))
+        project["open_issue_count"] = sum(item["status"] != "closed" for item in project["issues"])
+        project["active_review_tasks"] = project["final_review_tasks"] if project["review_phase"] in {"final_review", "final_complete"} else project["first_review_tasks"]
         if role in TEAM_ROLES:
             project["role"] = role
             project["role_focus"] = ROLE_FOCUS[role]
@@ -340,9 +382,17 @@ def build_app(database_path: Path | None = None) -> Flask:
             for project in ITERATION_PROJECTS.values()
         ]
         for project in pl_projects:
-            instruction = project.get("team_instructions", {}).get(role)
-            if instruction:
-                tasks.append({"kind": "PL 新项目", "title": instruction, "status": project["stage"], "due_date": "待 PL 确认", "project": project["name"], "project_id": project["id"], "pl_project": True})
+            phase = project["review_phase"]
+            task = (project["first_review_tasks"] if phase in {"initial_review", "meeting"} else project["final_review_tasks"]).get(role, {})
+            actionable = (
+                (phase == "initial_review" and task.get("status") == "pending")
+                or (phase == "final_review" and task.get("status") == "pending")
+            )
+            if actionable:
+                action = "提交首次评审（可确认无 Issue）" if phase == "initial_review" else "确认会议项已解决并提交最终结论"
+                tasks.append({"kind": "PL 新项目", "title": f"{project['name']}：{action}", "status": task["status"],
+                              "phase": phase, "action": action, "state": project["stage"], "due_date": "待处理",
+                              "project": project["name"], "project_id": project["id"], "pl_project": True})
         return jsonify({"projects": projects, "role": role, "role_focus": ROLE_FOCUS[role], "tasks": tasks})
 
     @app.post("/api/pl-projects")
@@ -352,8 +402,41 @@ def build_app(database_path: Path | None = None) -> Flask:
         context = body.get("context") or {}
         if not project_id or not context.get("productName"):
             return error("项目编号和名称不能为空。", 400)
-        state = {"id": project_id, "name": context["productName"], "stage": "团队评审中", "readiness": "等待团队评审", "confirmed": False, "team_instructions": {role: f"评审 {context['productName']} 的最终方案：重点确认 {ROLE_FOCUS[role]}。" for role in TEAM_ROLES}, "issues": [], "review_tasks": {role: {"status": "pending", "conclusion": ""} for role in TEAM_ROLES}}
-        return jsonify(write_pl_project(state))
+        state = {
+            "id": project_id, "name": context["productName"], "context": copy.deepcopy(context),
+            "final_plan": copy.deepcopy(body.get("finalPlan") or {}),
+            "minutes": str(body.get("minutes", "")), "minutes_analysis": str(body.get("minutesAnalysis", "")),
+            "minutes_updates": copy.deepcopy(body.get("minutesUpdates") or []),
+            "stage": "首次团队评审中", "readiness": "等待三方首次评审", "confirmed": False,
+            "review_phase": "initial_review", "report_version": 1, "meeting_started": False, "meeting_items_recorded": False,
+            "team_instructions": {role: f"评审 {context['productName']} 的最终方案：重点确认 {ROLE_FOCUS[role]}。" for role in TEAM_ROLES},
+            "issues": [], "first_review_tasks": {role: {"status": "pending", "conclusion": ""} for role in TEAM_ROLES},
+            "final_review_tasks": {role: {"status": "pending", "conclusion": ""} for role in TEAM_ROLES},
+            "leader_checks": {role: {"viewed": False, "confirmed": False, "note": ""} for role in ("PL", *TEAM_ROLES)},
+        }
+        return jsonify(public_pl_project(write_pl_project(state), "PL"))
+
+    @app.delete("/api/pl-projects/unconfirmed")
+    def revoke_unconfirmed_pl_projects():
+        """Remove proposal-only projects and the team tasks derived from them."""
+        body = request.get_json(silent=True) or {}
+        if body.get("role") != "PL" and request.args.get("role") != "PL":
+            return error("仅 PL 可以撤销未确认的新项目及其团队任务。", 403)
+        try:
+            with connection() as db:
+                rows = db.execute("SELECT project_id, payload FROM pl_project_state").fetchall()
+                project_ids = [
+                    row["project_id"] for row in rows
+                    if not bool(json.loads(row["payload"]).get("confirmed", False))
+                ]
+                if project_ids:
+                    db.executemany(
+                        "DELETE FROM pl_project_state WHERE project_id = ?",
+                        [(project_id,) for project_id in project_ids],
+                    )
+        except (sqlite3.Error, json.JSONDecodeError) as exc:
+            return error(f"撤销未确认项目失败：{exc}", 500)
+        return jsonify({"deleted_count": len(project_ids)})
 
     @app.get("/api/pl-projects/<project_id>")
     def get_pl_project(project_id):
@@ -370,8 +453,8 @@ def build_app(database_path: Path | None = None) -> Flask:
         if role not in TEAM_ROLES:
             return error("仅团队角色可以提交 Issue。", 403)
         project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
-        if not project or project.get("confirmed"):
-            return error("该项目当前不在团队评审阶段。")
+        if not project or project.get("review_phase") != "initial_review" or project.get("confirmed"):
+            return error("仅首次评审阶段可以新增 Issue。")
         title, detail = str(body.get("title", "")).strip(), str(body.get("detail", "")).strip()
         if not title or not detail:
             return error("请填写问题和背景说明。", 400)
@@ -386,7 +469,14 @@ def build_app(database_path: Path | None = None) -> Flask:
         response = str(body.get("response", "")).strip()
         if not issue or not response:
             return error("请填写 PL 处理说明。", 400)
-        issue["pl_response"], issue["status"] = response, "awaiting_submitter"
+        if project.get("review_phase") != "initial_review" or issue["status"] != "open":
+            return error("该 Issue 当前无法回复。")
+        action = body.get("action", "direct")
+        if action not in {"direct", "meeting_required"}:
+            return error("请选择“可直接解决”或“需会议解决”。", 400)
+        issue["pl_response"], issue["resolution"] = response, action
+        issue["status"] = "awaiting_submitter" if action == "direct" else "meeting_required"
+        project["meeting_items_recorded"] = any(item["status"] == "meeting_required" for item in project["issues"])
         return jsonify(public_pl_project(write_pl_project(project)))
 
     @app.post("/api/pl-projects/<project_id>/issues/<int:issue_id>/confirm")
@@ -395,8 +485,14 @@ def build_app(database_path: Path | None = None) -> Flask:
         role = str(body.get("role", ""))
         project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
         issue = next((item for item in (project or {}).get("issues", []) if item["id"] == issue_id), None)
-        if not issue or issue["owner_role"] != role or issue["status"] != "awaiting_submitter":
-            return error("仅提出 Issue 的角色可在 PL 回复后确认关闭。", 403)
+        if not issue or issue["owner_role"] != role:
+            return error("仅提出 Issue 的角色可以确认关闭。", 403)
+        if issue["status"] == "awaiting_submitter" and project.get("review_phase") == "initial_review":
+            pass
+        elif issue["status"] == "meeting_required" and project.get("review_phase") == "final_review":
+            pass
+        else:
+            return error("直接回复须在首次评审确认；会议项须在最终评审确认已解决。")
         issue["status"] = "closed"
         return jsonify(public_pl_project(write_pl_project(project), role))
 
@@ -407,34 +503,113 @@ def build_app(database_path: Path | None = None) -> Flask:
         project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
         if role not in TEAM_ROLES or not project:
             return error("无法提交当前评审。", 400)
-        if any(item["owner_role"] == role and item["status"] != "closed" for item in project.get("issues", [])):
-            return error("请先完成本角色提出的全部 Issue。")
+        task = project.get("first_review_tasks", {}).get(role)
+        if project.get("review_phase") != "initial_review" or not task or task.get("status") != "pending":
+            return error("当前评审任务不可提交。")
+        if any(item["owner_role"] == role and item["status"] in {"open", "awaiting_submitter"} for item in project.get("issues", [])):
+            return error("请先完成本角色可直接解决的 Issue。")
         if not conclusion:
             return error("请填写评审结论。", 400)
-        project["review_tasks"][role] = {"status": "awaiting_pl_confirmation", "conclusion": conclusion}
+        project["first_review_tasks"][role] = {"status": "submitted", "conclusion": conclusion}
         return jsonify(public_pl_project(write_pl_project(project), role))
 
-    @app.post("/api/pl-projects/<project_id>/reviews/complete")
-    def complete_pl_project_reviews(project_id):
+    @app.post("/api/pl-projects/<project_id>/meeting/start")
+    def start_pl_project_meeting(project_id):
         project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
         if not project:
             return error("未找到该新项目。", 404)
-        issues_open = any(item["status"] != "closed" for item in project.get("issues", []))
-        reviews_ready = all(project.get("review_tasks", {}).get(role, {}).get("status") == "awaiting_pl_confirmation" for role in TEAM_ROLES)
-        if issues_open or not reviews_ready:
-            return error("需等待全部 Issue 关闭，并收到三位负责人的评审结论。")
-        for role in TEAM_ROLES:
-            project["review_tasks"][role]["status"] = "completed"
-        project["stage"], project["readiness"] = "等待 PL 确认", "团队评审完成"
+        if project.get("review_phase") != "initial_review":
+            return error("当前不在可启动会议的首次评审阶段。")
+        direct_open = any(item["status"] in {"open", "awaiting_submitter"} for item in project["issues"])
+        reviews_ready = all(project["first_review_tasks"][role]["status"] == "submitted" for role in TEAM_ROLES)
+        if direct_open or not reviews_ready:
+            return error("需等待三方首次评审完成，并由提出者确认所有直接回复；会议项必须已记录。")
+        project.update({"review_phase": "meeting", "meeting_started": True, "stage": "会议进行中", "readiness": "等待会议纪要更新报告"})
         return jsonify(public_pl_project(write_pl_project(project)))
+
+    @app.post("/api/pl-projects/<project_id>/meeting")
+    def apply_pl_project_meeting(project_id):
+        body = request.get_json(silent=True) or {}
+        project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
+        minutes = str(body.get("minutes", "")).strip()
+        if not project:
+            return error("未找到该新项目。", 404)
+        if project.get("review_phase") != "meeting":
+            return error("请先完成首次评审并启动会议。")
+        if not minutes:
+            return error("请粘贴或上传会议纪要。", 400)
+        result = minutes_fallback(project["context"], minutes, project.get("final_plan"))
+        project.update({"minutes": minutes, "minutes_analysis": result["analysis"], "minutes_updates": result["updates"],
+                        "final_plan": result["updatedPlan"], "report_version": int(project.get("report_version", 1)) + 1,
+                        "review_phase": "final_review", "stage": "最终评审中", "readiness": "等待三方最终结论"})
+        project["final_review_tasks"] = {role: {"status": "pending", "conclusion": ""} for role in TEAM_ROLES}
+        return jsonify(public_pl_project(write_pl_project(project)))
+
+    @app.post("/api/pl-projects/<project_id>/final-reviews")
+    def submit_pl_project_final_review(project_id):
+        body = request.get_json(silent=True) or {}
+        role, conclusion = str(body.get("role", "")), str(body.get("conclusion", "")).strip()
+        if role not in TEAM_ROLES:
+            return error("仅团队角色可以提交最终结论。", 400)
+        project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
+        if not project or project.get("review_phase") != "final_review":
+            return error("当前不在最终评审阶段。")
+        task = project["final_review_tasks"][role]
+        if task["status"] != "pending":
+            return error("本角色最终评审已提交。")
+        if any(item["owner_role"] == role and item["status"] != "closed" for item in project["issues"]):
+            return error("请先确认本角色会议项已解决。")
+        if not conclusion:
+            return error("请填写最终评审结论。", 400)
+        project["final_review_tasks"][role] = {"status": "submitted", "conclusion": conclusion}
+        return jsonify(public_pl_project(write_pl_project(project), role))
+
+    @app.post("/api/pl-projects/<project_id>/final-reviews/complete")
+    def complete_pl_project_final_reviews(project_id):
+        project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
+        if not project:
+            return error("未找到该新项目。", 404)
+        if project.get("review_phase") != "final_review":
+            return error("当前不在可完成的最终评审阶段。")
+        if any(item["status"] != "closed" for item in project["issues"]) or not all(project["final_review_tasks"][role]["status"] == "submitted" for role in TEAM_ROLES):
+            return error("需等待三方最终结论，并确认所有会议项已解决。")
+        for role in TEAM_ROLES:
+            project["final_review_tasks"][role]["status"] = "completed"
+        project.update({"review_phase": "final_complete", "stage": "等待 Leader Check", "readiness": "最终评审完成"})
+        return jsonify(public_pl_project(write_pl_project(project)))
+
+    @app.post("/api/pl-projects/<project_id>/leader-checks")
+    def update_pl_project_leader_check(project_id):
+        body = request.get_json(silent=True) or {}
+        role = str(body.get("role", ""))
+        if role not in {"PL", *TEAM_ROLES}:
+            return error("未识别的 Leader 角色。", 400)
+        project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
+        if not project:
+            return error("未找到该新项目。", 404)
+        if project.get("review_phase") != "final_complete" or project.get("confirmed"):
+            return error("最终评审完成后才能更新 Leader Check。")
+        check = project["leader_checks"][role]
+        check["viewed"] = True
+        check["confirmed"] = bool(body.get("confirmed", True))
+        check["note"] = str(body.get("note", "")).strip()
+        return jsonify(public_pl_project(write_pl_project(project), role))
 
     @app.post("/api/pl-projects/<project_id>/confirm")
     def confirm_pl_project(project_id):
         project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
         if not project:
             return error("未找到当前新项目，请先发起团队评审。", 404)
+        ready = (
+            project.get("review_phase") == "final_complete"
+            and all(project["final_review_tasks"].get(role, {}).get("status") == "completed" for role in TEAM_ROLES)
+            and not any(item.get("status") != "closed" for item in project.get("issues", []))
+            and all(project["leader_checks"].get(role, {}).get("confirmed") for role in ("PL", *TEAM_ROLES))
+        )
+        if not ready:
+            return error("确认项目需处于等待 PL 确认阶段，三方任务完成、Issue 全部关闭且所有 Leader Check 已确认。")
         project.update({"confirmed": True, "stage": "项目已确认", "readiness": "可进入项目执行"})
-        return jsonify(write_pl_project(project))
+        return jsonify(public_pl_project(write_pl_project(project), "PL"))
 
     @app.post("/api/positioning-assistant")
     def positioning_assistant_api():

@@ -22,7 +22,7 @@ function applyRole(role) {
   const isTeamWorkflow = location.pathname.endsWith('/role-workflow.html');
   if (isPlWorkflow && selected !== 'PL') location.href = 'index.html';
   if (isTeamWorkflow && selected === 'PL') location.href = 'workflow.html';
-  if (location.pathname.endsWith('/new-project.html') && selected !== 'PL') location.href = 'index.html';
+  if (location.pathname.endsWith('/new-project.html') && selected !== 'PL' && !new URLSearchParams(location.search).get('project_id')) location.href = 'index.html';
   if (location.pathname.endsWith('/role-review.html') && selected === 'PL') location.href = 'index.html';
 }
 
@@ -61,6 +61,9 @@ function setFeedback(selector, message, error = false) {
 function statusText(status) {
   return ({pending: '待处理', awaiting_pl_confirmation: '待 PL 确认', completed: '已完成', open: '待 PL 处理', awaiting_submitter: '待提出团队确认', closed: '已关闭', accepted_risk: '已接受风险', '待确认': '待确认', '进行中': '进行中', '待开始': '待开始'})[status] || status;
 }
+function escapeHtml(value) {
+  const node = document.createElement('span'); node.textContent = value == null ? '' : String(value); return node.innerHTML;
+}
 
 function showPanel(id) {
   const step = panels.indexOf(id);
@@ -74,7 +77,7 @@ function showPanel(id) {
 function renderChat(chat) {
   const log = document.querySelector('#chat-log');
   if (!log) return;
-  log.innerHTML = chat.map(message => `<div class="message ${message.role === 'ai' ? 'ai' : 'user'}"><span class="avatar">${message.role === 'ai' ? 'AI' : 'PL'}</span><div><p>${message.text}</p></div></div>`).join('');
+  log.innerHTML = chat.map(message => `<div class="message ${message.role === 'ai' ? 'ai' : 'user'}"><span class="avatar">${message.role === 'ai' ? 'AI' : 'PL'}</span><div><p>${escapeHtml(message.text)}</p></div></div>`).join('');
   log.scrollTop = log.scrollHeight;
 }
 
@@ -83,8 +86,8 @@ function renderPlIssues(issues) {
   if (!list) return;
   list.innerHTML = issues.length ? issues.map(issue => `<div class="issue-row" data-issue-id="${issue.id}">
     <span class="tag ${issue.status === 'open' ? 'red' : issue.status === 'closed' ? 'green' : 'amber'}">${statusText(issue.status)}</span>
-    <div><b>${issue.title}</b><div class="issue-meta"><span>${issue.owner_role}</span><span>${issue.category}</span><span>${issue.priority}优先级</span></div><p>${issue.detail}</p>
-    ${issue.pl_response ? `<div class="callout"><b>PL 处理说明：</b>${issue.pl_response}</div>` : ''}
+    <div><b>${escapeHtml(issue.title)}</b><div class="issue-meta"><span>${escapeHtml(issue.owner_role)}</span><span>${escapeHtml(issue.category)}</span><span>${escapeHtml(issue.priority)}优先级</span></div><p>${escapeHtml(issue.detail)}</p>
+    ${issue.pl_response ? `<div class="callout"><b>PL 处理说明：</b>${escapeHtml(issue.pl_response)}</div>` : ''}
     ${issue.status === 'open' ? `<div class="issue-response"><textarea placeholder="说明你如何更新 Spec、处理问题或接受风险"></textarea><div class="actions"><button class="button secondary" data-issue-action="awaiting_submitter">更新 Spec，待提出团队确认</button><button class="button secondary" data-issue-action="accepted_risk">接受风险</button></div></div>` : ''}</div></div>`).join('') : '<div class="empty">团队尚未提交 Issue。</div>';
 }
 
@@ -94,7 +97,7 @@ function renderReviewStatus(state) {
   list.innerHTML = teamRoles.map(role => {
     const task = state.review_tasks[role];
     if (!task) return `<div class="review-status"><b>${role}</b><span>等待 PL 发起团队评审</span></div>`;
-    return `<div class="review-status"><b>${role}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span>${task.conclusion ? `<span>结论：${task.conclusion}</span>` : ''}${task.status === 'awaiting_pl_confirmation' ? `<button class="button secondary" data-review-confirm="${role}">确认 ${role} 评审完成</button>` : ''}</div>`;
+    return `<div class="review-status"><b>${escapeHtml(role)}</b><span>${escapeHtml(statusText(task.status))} · 截止 ${escapeHtml(task.due_date)}</span>${task.conclusion ? `<span>结论：${escapeHtml(task.conclusion)}</span>` : ''}${task.status === 'awaiting_pl_confirmation' ? `<button class="button secondary" data-review-confirm="${escapeHtml(role)}">确认 ${escapeHtml(role)} 评审完成</button>` : ''}</div>`;
   }).join('');
 }
 
@@ -112,7 +115,7 @@ function renderPlan(state) {
   const tasks = state.delivery_tasks || {};
   list.innerHTML = Object.keys(tasks).length ? `<div class="delivery-status"><b>任务分发进度</b>${teamRoles.map(role => {
     const task = tasks[role];
-    return `<div class="review-status"><b>${role} · ${task.title}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span>${task.result ? `<span>结果：${task.result}</span>` : ''}${task.status === 'awaiting_pl_confirmation' ? `<button class="button secondary" data-delivery-confirm="${role}">确认 ${role} 交付完成</button>` : ''}</div>`;
+    return `<div class="review-status"><b>${escapeHtml(role)} · ${escapeHtml(task.title)}</b><span>${escapeHtml(statusText(task.status))} · 截止 ${escapeHtml(task.due_date)}</span>${task.result ? `<span>结果：${escapeHtml(task.result)}</span>` : ''}${task.status === 'awaiting_pl_confirmation' ? `<button class="button secondary" data-delivery-confirm="${escapeHtml(role)}">确认 ${escapeHtml(role)} 交付完成</button>` : ''}</div>`;
   }).join('')}</div>` : '';
 }
 
@@ -197,7 +200,7 @@ function renderRoleWorkflow(state, role) {
   document.querySelector('#role-review-guide').textContent = review ? '请先提出需要 PL 处理的问题；所有问题得到可接受的处理后，再提交评审结论。' : 'PL 确认 Draft Product Spec 后，你会收到 O2O 的评审任务。';
   const canReview = review && review.status === 'pending';
   document.querySelectorAll('#role-review-card input,#role-review-card select,#role-review-card textarea,#submit-issue,#submit-review').forEach(node => node.disabled = !canReview);
-  document.querySelector('#my-issue-list').innerHTML = state.my_issues.length ? state.my_issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${issue.title} · ${statusText(issue.status)}</b>${issue.detail}${issue.pl_response ? `<br><b>PL 回复：</b>${issue.pl_response}` : ''}${issue.status === 'awaiting_submitter' ? `<br><button class="text-link" data-role-issue-confirm="${issue.id}">确认 Issue 已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
+  document.querySelector('#my-issue-list').innerHTML = state.my_issues.length ? state.my_issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${escapeHtml(issue.title)} · ${escapeHtml(statusText(issue.status))}</b>${escapeHtml(issue.detail)}${issue.pl_response ? `<br><b>PL 回复：</b>${escapeHtml(issue.pl_response)}` : ''}${issue.status === 'awaiting_submitter' ? `<br><button class="text-link" data-role-issue-confirm="${issue.id}">确认 Issue 已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
   const delivery = state.role_delivery_task;
   document.querySelector('#delivery-status').textContent = delivery ? statusText(delivery.status) : '等待任务分发';
   document.querySelector('#delivery-title').textContent = delivery ? delivery.title : '暂无任务';
@@ -226,16 +229,18 @@ async function setupOverview() {
   try {
     const role = currentRole(); const data = await api(`/api/overview?role=${encodeURIComponent(role)}`);
     table.innerHTML = data.projects.map(project => {
-      const link = project.pl_project ? (role === 'PL' ? 'new-project.html' : 'index.html#team-workspace') : `project-view.html?project=${project.id}`;
-      return `<tr><td><a href="${link}">${project.name}</a></td><td>${project.type}</td><td><span class="tag ${project.pl_project ? 'amber' : 'blue'}">${project.stage}</span></td><td><span class="tag ${project.readiness.includes('待处理') || project.readiness.includes('风险') ? 'red' : 'amber'}">${project.readiness}</span></td><td>${project.next}</td></tr>`;
+      const link = project.pl_project ? (role === 'PL' ? `new-project.html?project_id=${encodeURIComponent(project.id)}` : 'index.html#team-workspace') : `project-view.html?project=${encodeURIComponent(project.id)}`;
+      return `<tr><td><a href="${link}">${escapeHtml(project.name)}</a></td><td>${escapeHtml(project.type)}</td><td><span class="tag ${project.pl_project ? 'amber' : 'blue'}">${escapeHtml(project.stage)}</span></td><td><span class="tag ${project.readiness.includes('待处理') || project.readiness.includes('风险') ? 'red' : 'amber'}">${escapeHtml(project.readiness)}</span></td><td>${escapeHtml(project.next)}</td></tr>`;
     }).join('');
     const workspace = document.querySelector('#team-workspace');
     if (role !== 'PL' && workspace) {
       document.querySelector('#team-workspace-title').textContent = `${role} 的工作台`;
       document.querySelector('#team-workspace-desc').textContent = data.tasks.length ? '以下任务区分既有项目与 PL 新项目；请按工作指示完成评审或执行。' : `PL 尚未向 ${role} 分配新项目任务。`;
-      document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => task.pl_project ? `<a class="team-task task-link" href="role-review.html?project=${encodeURIComponent(task.project_id)}"><span class="tag amber">PL 新项目 · ${task.project}</span><b>${task.title}</b><span>${statusText(task.status)} · 点击进入团队评审</span></a>` : `<a class="team-task task-link" href="project-view.html?project=${encodeURIComponent(task.project_id)}"><span class="tag blue">${task.kind} · ${task.project}</span><b>${task.title}</b><span>${statusText(task.status)} · 查看项目</span></a>`).join('') : '<div class="empty">暂无待处理任务。</div>';
+      document.querySelector('#team-task-list').innerHTML = data.tasks.length ? data.tasks.map(task => task.pl_project ? `<a class="team-task task-link" href="role-review.html?project=${encodeURIComponent(task.project_id)}"><span class="tag amber">PL 新项目 · ${escapeHtml(task.project)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(task.action || task.status)} · 点击完成当前角色操作</span></a>` : `<a class="team-task task-link" href="project-view.html?project=${encodeURIComponent(task.project_id)}"><span class="tag blue">${escapeHtml(task.kind)} · ${escapeHtml(task.project)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(statusText(task.status))} · 查看项目</span></a>`).join('') : '<div class="empty">暂无待处理任务。</div>';
     }
-  } catch (_) { /* Static overview remains available if the server is unavailable. */ }
+  } catch (error) {
+    setFeedback('#team-task-list', `无法加载团队工作台：${error.message}`, true);
+  }
 }
 
 async function setupIterationProject() {
@@ -260,30 +265,35 @@ async function setupIterationProject() {
     document.querySelector('#iteration-risk').textContent = project.risk;
     document.querySelector('#iteration-task-list').innerHTML = teamRoles.map(role => {
       const task = project.tasks[role];
-      return `<div class="team-task"><span class="tag blue">${role}</span><b>${task.title}</b><span>${statusText(task.status)} · 截止 ${task.due_date}</span></div>`;
+      return `<div class="team-task"><span class="tag blue">${escapeHtml(role)}</span><b>${escapeHtml(task.title)}</b><span>${escapeHtml(statusText(task.status))} · 截止 ${escapeHtml(task.due_date)}</span></div>`;
     }).join('');
     if (project.role !== 'PL') {
-      document.querySelector('#iteration-my-task').innerHTML = `<div class="team-task"><span class="tag blue">${project.role}</span><b>${project.my_task.title}</b><span>${statusText(project.my_task.status)} · 截止 ${project.my_task.due_date}</span></div>`;
+      document.querySelector('#iteration-my-task').innerHTML = `<div class="team-task"><span class="tag blue">${escapeHtml(project.role)}</span><b>${escapeHtml(project.my_task.title)}</b><span>${escapeHtml(statusText(project.my_task.status))} · 截止 ${escapeHtml(project.my_task.due_date)}</span></div>`;
     }
   } catch (error) { setFeedback('#iteration-feedback', error.message, true); }
 }
 
 function projectLink(project, role) {
-  return project.pl_project ? (role === 'PL' ? 'new-project.html' : 'index.html#team-workspace') : `project-view.html?project=${encodeURIComponent(project.id)}`;
+  return project.pl_project ? `new-project.html?project_id=${encodeURIComponent(project.id)}` : `project-view.html?project=${encodeURIComponent(project.id)}`;
 }
 
 function renderPlRoleReview(state, role) {
   document.querySelector('#role-review-title').textContent = `${state.name} · 团队评审`;
   document.querySelector('#role-review-role').textContent = role;
   document.querySelector('#role-review-focus').textContent = state.role_focus;
-  document.querySelector('#role-review-background').textContent = state.name;
+  const finalPlan = state.final_plan || {};
+  document.querySelector('#role-review-background').textContent = finalPlan.positioning?.background || state.context?.projectDesc || state.name;
+  document.querySelector('#role-review-report').textContent = state.review_phase === 'final_review' ? `报告 v${state.report_version}：${(state.minutes_updates || []).join('； ') || '会议更新已持久化。'}` : '初版报告：请重点检查背景、范围、数据与交付假设。';
+  document.querySelector('#role-review-phase').textContent = ({initial_review:'首次评审：可提交 Issue 或确认无 Issue 后提交结论。', meeting:'会议进行中：等待 PL 更新报告。', final_review:'最终评审：请先确认本人会议项已解决，再提交最终结论。', final_complete:'最终评审已完成，等待 Leader Check。'})[state.review_phase] || state.stage;
   document.querySelector('#role-review-instruction').textContent = state.team_instructions[role];
-  const task = state.role_review_task || {};
+  const task = state.review_phase === 'final_review' ? state.final_review_tasks?.[role] : state.first_review_tasks?.[role] || state.role_review_task || {};
   document.querySelector('#role-review-task-status').textContent = statusText(task.status || 'pending');
-  const locked = task.status !== 'pending';
-  document.querySelectorAll('#role-review-app input,#role-review-app select,#role-review-app textarea,#submit-pl-issue,#submit-pl-review').forEach(node => node.disabled = locked);
+  const firstRound = state.review_phase === 'initial_review', finalRound = state.review_phase === 'final_review';
+  document.querySelectorAll('#role-review-app input,#role-review-app select,#role-review-app textarea,#submit-pl-issue,#submit-pl-review').forEach(node => node.disabled = task.status !== 'pending');
+  document.querySelector('#submit-pl-issue').hidden = !firstRound;
+  document.querySelector('#submit-pl-review').textContent = finalRound ? '提交最终结论 →' : '完成首次评审 →';
   const issues = state.my_issues || [];
-  document.querySelector('#pl-my-issues').innerHTML = issues.length ? issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${issue.title} · ${statusText(issue.status)}</b><span>${issue.detail}</span>${issue.pl_response ? `<span><b>PL 回复：</b>${issue.pl_response}</span>` : ''}${issue.status === 'awaiting_submitter' ? `<button class="text-link" data-pl-issue-confirm="${issue.id}">确认 Issue 已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
+  document.querySelector('#pl-my-issues').innerHTML = issues.length ? issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${escapeHtml(issue.title)} · ${escapeHtml(statusText(issue.status))}</b><span>${escapeHtml(issue.detail)}</span>${issue.pl_response ? `<span><b>PL 回复：</b>${escapeHtml(issue.pl_response)}</span>` : ''}${issue.status === 'awaiting_submitter' ? `<button class="text-link" data-pl-issue-confirm="${issue.id}">确认直接回复已解决</button>` : ''}${issue.status === 'meeting_required' && state.review_phase === 'final_review' ? `<button class="text-link" data-pl-issue-confirm="${issue.id}">确认会议项已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
 }
 
 async function setupPlRoleReview() {
@@ -294,7 +304,7 @@ async function setupPlRoleReview() {
   const load = async () => { try { renderPlRoleReview(await api(`/api/pl-projects/${encodeURIComponent(projectId)}?role=${encodeURIComponent(role)}`), role); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } };
   await load();
   document.querySelector('#submit-pl-issue').addEventListener('click', async () => { try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/issues`, {method:'POST', body:JSON.stringify({role, category:document.querySelector('#pl-issue-category').value, priority:document.querySelector('#pl-issue-priority').value, title:document.querySelector('#pl-issue-title').value.trim(), detail:document.querySelector('#pl-issue-detail').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', 'Issue 已提交给 PL。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
-  document.querySelector('#submit-pl-review').addEventListener('click', async () => { try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/reviews`, {method:'POST', body:JSON.stringify({role, conclusion:document.querySelector('#pl-review-conclusion').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', '评审结论已提交，等待 PL 确认。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
+  document.querySelector('#submit-pl-review').addEventListener('click', async () => { try { const current = await api(`/api/pl-projects/${encodeURIComponent(projectId)}?role=${encodeURIComponent(role)}`); const endpoint = current.review_phase === 'final_review' ? 'final-reviews' : 'reviews'; const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/${endpoint}`, {method:'POST', body:JSON.stringify({role, conclusion:document.querySelector('#pl-review-conclusion').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', current.review_phase === 'final_review' ? '最终结论已提交。' : '首次评审已提交。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
   document.querySelector('#pl-my-issues').addEventListener('click', async event => { const button = event.target.closest('[data-pl-issue-confirm]'); if (!button) return; try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/issues/${button.dataset.plIssueConfirm}/confirm`, {method:'POST', body:JSON.stringify({role})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', 'Issue 已确认关闭。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
 }
 
@@ -309,7 +319,7 @@ async function setupSidebarProjects() {
     const data = await api(`/api/overview?role=${encodeURIComponent(role)}`);
     nav.innerHTML = data.projects.map(project => {
       const link = projectLink(project, role);
-      return `<a href="${link}"${isCurrentProject(link) ? ' class="active" aria-current="page"' : ''}><span class="icon">▣</span>${project.name}</a>`;
+      return `<a href="${link}"${isCurrentProject(link) ? ' class="active" aria-current="page"' : ''}><span class="icon">▣</span>${escapeHtml(project.name)}</a>`;
     }).join('');
   } catch (_) { /* Keep Overview available when the local server is unavailable. */ }
 }

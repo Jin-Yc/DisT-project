@@ -1,4 +1,4 @@
-"""Persisted O2O collaboration workflow for the DisT prototype."""
+"""Persisted product-readiness workflow for the DisT prototype."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import os
 import sqlite3
 import urllib.error
 import urllib.request
+from contextlib import closing
 from pathlib import Path
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
@@ -15,24 +16,10 @@ from flask import Flask, jsonify, redirect, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
 TEAM_ROLES = ("Dsci", "DA & RV", "Ops")
-STEPS = ("clarify", "draft", "review", "minutes", "plan", "development")
-STAGE_LABELS = {
-    "clarify": "需求澄清中",
-    "draft": "Draft Spec 待确认",
-    "review": "团队评审中",
-    "minutes": "可行性评审准备",
-    "plan": "排期与任务分发",
-    "development": "一期开发已启动",
-}
 ROLE_FOCUS = {
     "Dsci": "方法论可行性、标准对齐、客户预期与痛点",
     "DA & RV": "数据覆盖、数据粒度、更新频率与招募要求",
     "Ops": "Scope、上线时间、成功 KPI 与交付质量",
-}
-DEFAULT_PLAN = {
-    "Dsci": {"title": "完成方法论可行性验证", "due_date": "2026-08-16"},
-    "DA & RV": {"title": "确认数据覆盖与招募方案", "due_date": "2026-08-18"},
-    "Ops": {"title": "确认交付计划与质量门槛", "due_date": "2026-08-20"},
 }
 ITERATION_PROJECTS = {
     "ri": {
@@ -60,28 +47,6 @@ ITERATION_PROJECTS = {
         },
     },
 }
-INITIAL_STATE = {
-    "project": {"id": "o2o", "name": "O2O", "owner": "PL", "type": "新产品 Launch"},
-    "stage": "clarify",
-    "chat": [
-        {"role": "ai", "text": "先从核心决策开始。谁会在什么决策中使用这个产品？请描述当前如何完成该决策。"},
-        {"role": "PL", "text": "面向中国快消品牌的品类经理，帮助他们每周识别市场异常，并决定补货和促销动作。"},
-    ],
-    "summary": {
-        "confirmed": "目标用户：快消品牌品类经理",
-        "pending": "客户是否愿意为周度预警付费",
-        "suggestion": "先明确首发市场、品类和数据更新频率",
-    },
-    "issues": [],
-    "review_tasks": {},
-    "plan_tasks": copy.deepcopy(DEFAULT_PLAN),
-    "delivery_tasks": {},
-    "minutes": "",
-    "minutes_applied": False,
-    "plan_completed": False,
-}
-
-
 def build_app(database_path: Path | None = None) -> Flask:
     app = Flask(__name__, static_folder="assets", static_url_path="/assets")
     db_path = database_path or ROOT / "instance" / "dist.db"
@@ -94,59 +59,19 @@ def build_app(database_path: Path | None = None) -> Flask:
         return db
 
     def initialise() -> None:
-        with connection() as db:
-            db.execute("CREATE TABLE IF NOT EXISTS workflow_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+        with closing(connection()) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS pl_project_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
-            db.execute("DELETE FROM workflow_state WHERE project_id = 'o2o'")
-
-    def normalise(state: dict) -> dict:
-        had_review_tasks = "review_tasks" in state
-        had_delivery_tasks = "delivery_tasks" in state
-        for key, value in INITIAL_STATE.items():
-            state.setdefault(key, copy.deepcopy(value))
-        # Migrate the previous single-user demo state without invalidating existing local data.
-        for issue in state["issues"]:
-            issue.setdefault("owner_role", "DA & RV")
-            issue.setdefault("category", "数据依赖")
-            issue.setdefault("priority", "阻塞" if issue.get("status") == "open" else "中")
-            if issue.get("status") == "resolved":
-                issue["status"] = "closed"
-            issue.setdefault("pl_response", "")
-        # Older demos could already be beyond review without role-level task records.
-        # Treat those historical milestones as completed and expose the current delivery work.
-        if state["stage"] in {"review", "minutes", "plan", "development"} and not state["review_tasks"] and not had_review_tasks:
-            review_status = "pending" if state["stage"] == "review" else "completed"
-            state["review_tasks"] = {
-                role: {"status": review_status, "due_date": "2026-08-14", "conclusion": "", "pl_confirmed": review_status == "completed"}
-                for role in TEAM_ROLES
-            }
-        if state["stage"] == "development" and not state["delivery_tasks"] and not had_delivery_tasks:
-            state["delivery_tasks"] = {
-                role: {**state["plan_tasks"][role], "status": "pending", "result": "", "pl_confirmed": False}
-                for role in TEAM_ROLES
-            }
-            state["plan_completed"] = True
-        return state
-
-    def read_state() -> dict:
-        with connection() as db:
-            row = db.execute("SELECT payload FROM workflow_state WHERE project_id = 'o2o'").fetchone()
-        return normalise(json.loads(row["payload"]))
-
-    def write_state(state: dict) -> dict:
-        state = normalise(state)
-        with connection() as db:
-            db.execute("UPDATE workflow_state SET payload = ? WHERE project_id = 'o2o'", (json.dumps(state, ensure_ascii=False),))
-        return state
+            db.execute("DELETE FROM pl_project_state WHERE project_id = 'o2o' OR json_extract(payload, '$.name') = 'O2O'")
+            db.execute("DROP TABLE IF EXISTS workflow_state")
 
     def read_pl_projects() -> list[dict]:
-        with connection() as db:
+        with closing(connection()) as db, db:
             rows = db.execute("SELECT payload FROM pl_project_state ORDER BY rowid DESC").fetchall()
         return [normalise_pl_project(item) for item in (json.loads(row["payload"]) for row in rows) if item.get("id") != "o2o" and item.get("name") != "O2O"]
 
     def write_pl_project(state: dict) -> dict:
         state = normalise_pl_project(state)
-        with connection() as db:
+        with closing(connection()) as db, db:
             db.execute("INSERT OR REPLACE INTO pl_project_state VALUES (?, ?)", (state["id"], json.dumps(state, ensure_ascii=False)))
         return state
 
@@ -224,37 +149,6 @@ def build_app(database_path: Path | None = None) -> Flask:
             "state": project["stage"],
             "status": project["readiness"],
         }
-
-    def step_index(state: dict) -> int:
-        return STEPS.index(state["stage"])
-
-    def open_issues(state: dict) -> list[dict]:
-        return [item for item in state["issues"] if item["status"] in {"open", "awaiting_submitter"}]
-
-    def role_review_complete(state: dict, role: str) -> bool:
-        task = state["review_tasks"].get(role, {})
-        return task.get("status") == "completed"
-
-    def refresh_stage(state: dict) -> None:
-        if state["stage"] == "review" and all(role_review_complete(state, role) for role in TEAM_ROLES):
-            # Stage remains review until PL explicitly starts feasibility. The readiness flag is computed by API.
-            return
-
-    def public_state(state: dict, role: str | None = None) -> dict:
-        state = copy.deepcopy(normalise(state))
-        state["stage_label"] = STAGE_LABELS[state["stage"]]
-        state["open_issue_count"] = len(open_issues(state))
-        state["unlocked_steps"] = list(range(min(step_index(state) + 2, 5)))
-        state["ready_for_feasibility"] = state["stage"] == "review" and all(
-            role_review_complete(state, team) for team in TEAM_ROLES
-        ) and not open_issues(state)
-        if role in TEAM_ROLES:
-            state["role"] = role
-            state["role_focus"] = ROLE_FOCUS[role]
-            state["role_review_task"] = state["review_tasks"].get(role)
-            state["role_delivery_task"] = state["delivery_tasks"].get(role)
-            state["my_issues"] = [item for item in state["issues"] if item["owner_role"] == role]
-        return state
 
     def error(message: str, status: int = 409):
         return jsonify({"error": message}), status
@@ -454,7 +348,7 @@ def build_app(database_path: Path | None = None) -> Flask:
         if body.get("role") != "PL" and request.args.get("role") != "PL":
             return error("仅 PL 可以撤销未确认的新项目及其团队任务。", 403)
         try:
-            with connection() as db:
+            with closing(connection()) as db, db:
                 rows = db.execute("SELECT project_id, payload FROM pl_project_state").fetchall()
                 project_ids = [
                     row["project_id"] for row in rows
@@ -680,219 +574,6 @@ def build_app(database_path: Path | None = None) -> Flask:
         result["role"] = role
         result["my_task"] = None if role == "PL" else result["tasks"][role]
         return jsonify(result)
-
-    @app.get("/api/o2o")
-    def get_o2o():
-        return jsonify(public_state(read_state()))
-
-    @app.get("/api/o2o/role")
-    def get_role_o2o():
-        role = request.args.get("role", "")
-        invalid = ensure_team_role(role)
-        return invalid or jsonify(public_state(read_state(), role))
-
-    @app.post("/api/o2o/chat")
-    def add_chat():
-        body = request.get_json(silent=True) or {}
-        text = str(body.get("text", "")).strip()
-        if not text:
-            return error("请先补充需求信息。", 400)
-        state = read_state()
-        if step_index(state) > 1:
-            return error("Draft Spec 已进入评审，请在对应步骤继续处理。")
-        state["chat"].extend([
-            {"role": "PL", "text": text},
-            {"role": "ai", "text": "已记录。这项信息会写入 Draft Spec；下一步请确认它属于客户证据、首发范围还是数据依赖。"},
-        ])
-        state["summary"]["confirmed"] = "已补充：" + text[:34]
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/draft/confirm")
-    def confirm_draft():
-        state = read_state()
-        if state["stage"] not in {"clarify", "draft"}:
-            return error("Draft Spec 已确认，请继续团队评审。")
-        state["stage"] = "review"
-        state["review_tasks"] = {
-            role: {"status": "pending", "due_date": "2026-08-14", "conclusion": "", "pl_confirmed": False}
-            for role in TEAM_ROLES
-        }
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/issues")
-    def create_issue():
-        body = request.get_json(silent=True) or {}
-        role = str(body.get("role", ""))
-        invalid = ensure_team_role(role)
-        if invalid:
-            return invalid
-        state = read_state()
-        if state["stage"] != "review":
-            return error("PL 发起团队评审后，才能记录 Issue。")
-        title = str(body.get("title", "")).strip()
-        detail = str(body.get("detail", "")).strip()
-        category = str(body.get("category", "其他")).strip()
-        priority = str(body.get("priority", "中")).strip()
-        if not title or not detail:
-            return error("请填写问题和背景说明。", 400)
-        next_id = max((item["id"] for item in state["issues"]), default=0) + 1
-        state["issues"].append({
-            "id": next_id, "owner_role": role, "status": "open", "title": title, "detail": detail,
-            "category": category, "priority": priority, "pl_response": "",
-        })
-        return jsonify(public_state(write_state(state), role))
-
-    @app.post("/api/o2o/issues/<int:issue_id>/respond")
-    def respond_issue(issue_id: int):
-        body = request.get_json(silent=True) or {}
-        response = str(body.get("response", "")).strip()
-        action = body.get("action", "awaiting_submitter")
-        if action not in {"awaiting_submitter", "accepted_risk"} or not response:
-            return error("请填写处理说明，并选择有效的处理方式。", 400)
-        state = read_state()
-        issue = next((item for item in state["issues"] if item["id"] == issue_id), None)
-        if not issue:
-            return error("未找到该 Issue。", 404)
-        if issue["status"] != "open":
-            return error("该 Issue 当前无需 PL 再次处理。")
-        issue["pl_response"] = response
-        issue["status"] = action
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/issues/<int:issue_id>/confirm")
-    def confirm_issue(issue_id: int):
-        body = request.get_json(silent=True) or {}
-        role = str(body.get("role", ""))
-        invalid = ensure_team_role(role)
-        if invalid:
-            return invalid
-        state = read_state()
-        issue = next((item for item in state["issues"] if item["id"] == issue_id), None)
-        if not issue or issue["owner_role"] != role:
-            return error("只能确认本团队提出的 Issue。", 403)
-        if issue["status"] != "awaiting_submitter":
-            return error("PL 回复后，提出团队才能确认关闭。")
-        issue["status"] = "closed"
-        return jsonify(public_state(write_state(state), role))
-
-    @app.post("/api/o2o/reviews/submit")
-    def submit_review():
-        body = request.get_json(silent=True) or {}
-        role = str(body.get("role", ""))
-        conclusion = str(body.get("conclusion", "")).strip()
-        invalid = ensure_team_role(role)
-        if invalid:
-            return invalid
-        state = read_state()
-        task = state["review_tasks"].get(role)
-        if state["stage"] != "review" or not task:
-            return error("当前尚未进入团队评审。")
-        unresolved = [item for item in state["issues"] if item["owner_role"] == role and item["status"] in {"open", "awaiting_submitter"}]
-        if unresolved:
-            return error("请先完成或确认本团队提出的 Issue，再提交评审结论。")
-        if not conclusion:
-            return error("请填写评审结论。", 400)
-        task["conclusion"] = conclusion
-        task["status"] = "awaiting_pl_confirmation"
-        return jsonify(public_state(write_state(state), role))
-
-    @app.post("/api/o2o/reviews/<role>/confirm")
-    def confirm_review(role: str):
-        invalid = ensure_team_role(role)
-        if invalid:
-            return invalid
-        state = read_state()
-        task = state["review_tasks"].get(role)
-        if not task or task["status"] != "awaiting_pl_confirmation":
-            return error("该团队尚未提交可确认的评审结论。")
-        task["status"] = "completed"
-        task["pl_confirmed"] = True
-        refresh_stage(state)
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/feasibility/start")
-    def start_feasibility():
-        state = read_state()
-        ready = state["stage"] == "review" and all(role_review_complete(state, role) for role in TEAM_ROLES) and not open_issues(state)
-        if not ready:
-            return error("请等待所有团队提交并由 PL 确认评审结论，同时关闭阻塞 Issue。")
-        state["stage"] = "minutes"
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/minutes")
-    def apply_minutes():
-        minutes = str((request.get_json(silent=True) or {}).get("minutes", "")).strip()
-        state = read_state()
-        if state["stage"] != "minutes":
-            return error("请先完成团队评审并进入可行性评审。")
-        if not minutes:
-            return error("请粘贴或加载会议纪要。", 400)
-        state["minutes"] = minutes
-        state["minutes_applied"] = True
-        state["stage"] = "plan"
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/plan")
-    def save_plan():
-        tasks = (request.get_json(silent=True) or {}).get("tasks", {})
-        state = read_state()
-        if state["stage"] != "plan":
-            return error("会议纪要更新后，才能编辑任务计划。")
-        for role in TEAM_ROLES:
-            task = tasks.get(role, {})
-            title, due_date = str(task.get("title", "")).strip(), str(task.get("due_date", "")).strip()
-            if not title or not due_date:
-                return error(f"请补全 {role} 的任务名称和截止时间。", 400)
-            state["plan_tasks"][role] = {"title": title, "due_date": due_date}
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/plan/complete")
-    def complete_plan():
-        state = read_state()
-        if state["stage"] != "plan" or not state["minutes_applied"]:
-            return error("会议纪要更新 Product Spec 后，才能确认任务分发。")
-        state["delivery_tasks"] = {
-            role: {**state["plan_tasks"][role], "status": "pending", "result": "", "pl_confirmed": False}
-            for role in TEAM_ROLES
-        }
-        state["plan_completed"] = True
-        state["stage"] = "development"
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/delivery/submit")
-    def submit_delivery():
-        body = request.get_json(silent=True) or {}
-        role = str(body.get("role", ""))
-        result = str(body.get("result", "")).strip()
-        invalid = ensure_team_role(role)
-        if invalid:
-            return invalid
-        state = read_state()
-        task = state["delivery_tasks"].get(role)
-        if not task:
-            return error("PL 尚未向该角色分发执行任务。")
-        if not result:
-            return error("请填写交付结果或风险说明。", 400)
-        task["result"] = result
-        task["status"] = "awaiting_pl_confirmation"
-        return jsonify(public_state(write_state(state), role))
-
-    @app.post("/api/o2o/delivery/<role>/confirm")
-    def confirm_delivery(role: str):
-        invalid = ensure_team_role(role)
-        if invalid:
-            return invalid
-        state = read_state()
-        task = state["delivery_tasks"].get(role)
-        if not task or task["status"] != "awaiting_pl_confirmation":
-            return error("该团队尚未提交可确认的交付结果。")
-        task["status"] = "completed"
-        task["pl_confirmed"] = True
-        return jsonify(public_state(write_state(state)))
-
-    @app.post("/api/o2o/reset")
-    def reset_o2o():
-        return jsonify(public_state(write_state(copy.deepcopy(INITIAL_STATE))))
 
     return app
 

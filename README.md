@@ -1,54 +1,39 @@
 # DisT
 
-DisT 是一个面向产品准备度管理的本地交互原型。平台以 PL 主导的新建项目流程为核心，并在同一 Overview 中区分已确认的新项目与只读的存量迭代项目。
+DisT 是一个面向产品准备度管理的本地交互原型。当前产品路径以 PL 主导的新项目为核心：项目在跨角色评审、最终结论和 Leader Check 全部完成前，不会成为正式项目。
 
-## 当前能力
+所有产品数据、AI 建议、会议纪要、评审结论及迭代任务均为模拟内容；本原型不包含真实账号认证、通知、线上会议或生产级权限控制。
 
-- PL 可创建方案、完成十问 AI 访谈、生成并更新方案报告、发起跨角色团队评审，并在 Leader Check 后确认项目。
-- Dsci、DA & RV、Ops 仅在收到评审指示后，通过自己的 Overview 工作台进入对应评审页。
-- 团队角色可提交 Issue；PL 回复后，提出角色确认关闭；每位角色完成结论后，PL 才能结束团队评审。
-- 项目只有在 PL 点击“确认项目”后，才会出现在 Overview 的项目列表、甘特图和侧栏 Projects 中。
-- RI 与 Ecom 保留为只读的存量项目迭代快照。
-
-原型数据、AI 建议、会议纪要、评审内容与迭代任务均为模拟内容；不包含真实账号、权限认证、通知或线上会议能力。
-
-## 新建项目流程
+## 核心工作流
 
 ```text
-创建方案
-  → AI 十问访谈
-  → 生成方案报告
-  → 会议纪要分析并更新成熟度
-  → 发起团队评审
-  → Dsci / DA & RV / Ops 提交 Issue 与评审结论
-  → PL 回复 Issue；提出角色确认关闭
-  → PL 确认团队评审完成
-  → Leader Check
-  → 确认方案
-  → 确认项目
-  → 项目进入 Overview 与 Projects
+创建方案 → AI 十问访谈 → 生成初版报告 → 发起首次团队评审
+  →（处理直接回复或记录会议项）→ 启动会议
+  → 分析会议纪要并更新报告 → 最终团队评审
+  → 全部 Issue 由提出角色确认关闭 → Leader Check
+  → PL 确认项目 → 项目进入 Overview 与 Projects
 ```
 
-团队评审的约束是：所有 Issue 必须关闭，且 Dsci、DA & RV、Ops 均提交评审结论后，PL 才能结束团队评审。
+工作流门禁：
+
+- 只有 Dsci、DA & RV、Ops 可以提交 Issue 与团队评审结论。
+- PL 可回复 Issue；只有 Issue 的提出角色可以确认其关闭。
+- 首次评审完成后才能启动会议；会议纪要会持久化更新报告并开启最终评审。
+- 三方最终结论、所有 Issue 关闭，以及 PL 和三方 Leader Check 均完成后，PL 才能确认项目。
+- 未确认项目仅显示在相关角色的工作台；确认后才出现在 Overview、甘特图和 Projects 导航中。
+
+RI 与 Ecom 是只读的存量迭代快照，用于演示项目组合与角色任务展示。
 
 ## 角色与页面
 
-| 角色 | 入口 | 能力 |
+| 角色 | 入口 | 主要操作 |
 | --- | --- | --- |
-| PL | Overview、新建项目、存量项目页 | 创建并推进新项目；处理团队 Issue；完成 Leader Check 与项目确认 |
-| Dsci | Overview 工作台、团队评审页、存量项目页 | 从任务卡进入评审；提交/确认 Issue；提交方法论评审结论 |
-| DA & RV | Overview 工作台、团队评审页、存量项目页 | 从任务卡进入评审；提交/确认 Issue；提交数据与调研结论 |
-| Ops | Overview 工作台、团队评审页、存量项目页 | 从任务卡进入评审；提交/确认 Issue；提交落地与运营结论 |
+| PL | Overview、`new-project.html` | 创建方案、处理 Issue、推进评审、执行 Leader Check 与确认项目 |
+| Dsci | Overview 工作台、`role-review.html` | 方法论相关评审、提交/关闭本人 Issue、提交两轮结论 |
+| DA & RV | Overview 工作台、`role-review.html` | 数据与调研评审、提交/关闭本人 Issue、提交两轮结论 |
+| Ops | Overview 工作台、`role-review.html` | Scope、交付与运营评审、提交/关闭本人 Issue、提交两轮结论 |
 
-角色可通过侧边栏底部的“切换角色”选择。非 PL 不显示新建项目入口，也不能进入 PL 的创建流程。
-
-## 项目展示规则
-
-| 项目状态 | Overview / 侧栏 Projects | 团队工作台 |
-| --- | --- | --- |
-| PL 创建、AI 访谈、方案报告、团队评审、Leader Check | 不展示为正式项目 | 仅在 PL 发起团队评审后显示相应工作指示 |
-| PL 确认项目 | 展示项目列表、甘特图与 Projects 导航 | 保留项目协作上下文 |
-| RI / Ecom 存量迭代 | 始终展示为只读项目快照 | 展示对应模拟迭代任务 |
+角色通过侧边栏切换。角色选择仅用于本地界面演示，不构成认证或授权边界。
 
 ## 本地运行
 
@@ -59,7 +44,9 @@ python3 -m venv .venv
 .venv/bin/python app.py
 ```
 
-打开 <http://127.0.0.1:8765>。首次运行会创建 `instance/dist.db`，保存本机的新项目评审与确认状态。
+打开 <http://127.0.0.1:8765>。首次运行创建 `instance/dist.db`，用于保存本机的新项目评审和确认状态。
+
+旧 O2O API（`/api/o2o/*`）已退役并返回 `410`；旧工作流页面 URL 会重定向到当前体验。启动时会删除历史 O2O 数据和旧 `workflow_state` 表。
 
 ## 测试
 
@@ -67,23 +54,30 @@ python3 -m venv .venv
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-测试覆盖新项目的团队评审、Issue 闭环、项目确认后的 Overview 展示、角色工作台跳转、存量项目快照，以及 UI 资源版本契约。
+测试覆盖工作流门禁、Issue 所有权、项目确认后的可见性、旧 O2O 数据迁移、只读迭代快照，以及共享页面资源与布局契约。
 
 ## 项目结构
 
 ```text
-app.py                 Flask 页面路由、SQLite 状态与新项目协作 API
-index.html             Overview、角色工作台与项目列表
-new-project.html       PL 新建项目：创建、访谈、报告、评审与确认
-role-review.html       团队角色的 Issue 与评审结论页面
-project-view.html      RI / Ecom 的只读迭代项目快照
-assets/app.css         基础布局与交互样式
-assets/ui-polish.css   统一的卡片、表单、状态与响应式视觉层
-assets/app.js          角色切换、工作台任务跳转与评审页交互
-assets/new-project.js  PL 新建项目流程交互
-tests/                 API 与 UI 契约测试
+app.py                         Flask 页面路由、SQLite 持久化与 JSON API
+index.html                     Overview、角色工作台、项目组合
+new-project.html               PL 新建项目和工作流推进页
+role-review.html               三方角色的首次/最终评审页
+project-view.html              RI / Ecom 只读迭代快照
+assets/app.js                  角色、Overview、侧栏及评审页交互
+assets/new-project.js          新项目创建、访谈、报告与确认交互
+assets/app.css                 基础页面样式
+assets/ui-polish.css           共享 UI 视觉层
+tests/                         API 工作流与 UI 契约测试
+.agents/skills/                项目专用开发、前端和测试工作流指引
+AGENTS.md                      项目约束、开发规则与测试约定
 ```
 
-## UI 原则
+`workflow.html`、`role-workflow.html` 和 `demo.html` 仅保留为历史 URL 的兼容入口；应用会在服务端将它们重定向至当前页面。
 
-所有主页面共用同一套基础样式与 UI 资源版本：统一的侧栏、顶部导航、卡片、标签、表单圆角、按钮层级、状态颜色与响应式规则。历史 O2O 页面已重定向至当前体验，避免保留两套视觉语言。
+## 维护约定
+
+- SQLite 服务端状态与浏览器 `localStorage` 草稿状态必须分离。
+- 动态 HTML 写入前须转义内容，并保留角色限制与流程门禁。
+- 修改共享 CSS/JS 时，同步更新 HTML 引用的资源版本与 `tests/test_ui_layout_contract.py`。
+- 修改 API、持久化或流程状态时，先读 `.agents/skills/dist-workflow/SKILL.md`；修改前端或测试时读取对应 Skill。

@@ -2,9 +2,10 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
-from app import INITIAL_STATE, build_app
+from app import build_app
 
 
 class WorkflowApiTest(unittest.TestCase):
@@ -21,19 +22,22 @@ class WorkflowApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, expected, response.get_json())
         return response.get_json()
 
-    def test_database_initialization_removes_o2o_and_retires_legacy_api(self):
+    def test_database_initialization_removes_retired_o2o_data_and_api(self):
         db_path = Path(self.temp.name) / "test.db"
-        with sqlite3.connect(db_path) as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM workflow_state").fetchone()[0], 0)
+        with closing(sqlite3.connect(db_path)) as db, db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM pl_project_state").fetchone()[0], 0)
 
         legacy_db_path = Path(self.temp.name) / "legacy.db"
-        with sqlite3.connect(legacy_db_path) as db:
+        with closing(sqlite3.connect(legacy_db_path)) as db, db:
             db.execute("CREATE TABLE workflow_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
-            db.execute("INSERT INTO workflow_state VALUES (?, ?)", ("o2o", json.dumps(INITIAL_STATE)))
+            db.execute("CREATE TABLE pl_project_state (project_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+            db.execute("INSERT INTO workflow_state VALUES (?, ?)", ("o2o", "{}"))
+            db.execute("INSERT INTO pl_project_state VALUES (?, ?)", ("o2o", json.dumps({"id": "o2o", "name": "O2O"})))
         legacy_app = build_app(legacy_db_path)
-        with sqlite3.connect(legacy_db_path) as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM workflow_state WHERE project_id = 'o2o'").fetchone()[0], 0)
+        with closing(sqlite3.connect(legacy_db_path)) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            self.assertNotIn("workflow_state", tables)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM pl_project_state WHERE project_id = 'o2o'").fetchone()[0], 0)
         response = legacy_app.test_client().get("/api/o2o")
         self.assertEqual(response.status_code, 410, response.get_json())
 
@@ -200,8 +204,11 @@ class WorkflowApiTest(unittest.TestCase):
 
     def test_role_review_page_is_served(self):
         response = self.client.get("/role-review.html")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("团队评审", response.get_data(as_text=True))
+        try:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("团队评审", response.get_data(as_text=True))
+        finally:
+            response.close()
 
     def test_legacy_pages_redirect_to_current_experience(self):
         self.assertEqual(self.client.get("/workflow.html").status_code, 302)

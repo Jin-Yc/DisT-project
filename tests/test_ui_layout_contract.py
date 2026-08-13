@@ -11,11 +11,11 @@ class UiLayoutContractTest(unittest.TestCase):
             page = (ROOT / name).read_text(encoding="utf-8")
             self.assertIn("assets/app.css?v=9", page)
             self.assertIn("assets/ui-polish.css?v=32", page)
-            self.assertIn("assets/app.js?v=15", page)
+            self.assertIn("assets/app.js?v=16", page)
         new_project = (ROOT / "new-project.html").read_text(encoding="utf-8")
         self.assertIn("assets/app.css?v=9", new_project)
         self.assertIn("assets/ui-polish.css?v=32", new_project)
-        self.assertIn("assets/app.js?v=15", new_project)
+        self.assertIn("assets/app.js?v=16", new_project)
         self.assertIn("assets/new-project.js?v=35", new_project)
 
     def test_all_app_pages_include_a_project_navigation_container(self):

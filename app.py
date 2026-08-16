@@ -247,6 +247,10 @@ def build_app(database_path: Path | None = None) -> Flask:
         positioning = report.get("positioning", {})
         return f"方案背景：{positioning.get('background', '暂无')}；目标客户：{positioning.get('target', '暂无')}；核心痛点：{positioning.get('pain', '暂无')}。"
 
+    def answer_review_assistant_question(project: dict, role: str, question: str) -> str:
+        answer = answer_plan_question(project.get("final_plan", {}), question)
+        return f"从 {role} 的评审重点“{ROLE_FOCUS[role]}”来看，{answer} 如需形成正式意见，请将待确认事项提交为 Issue。"
+
     def ensure_team_role(role: str):
         if role not in TEAM_ROLES:
             return error("请选择有效的团队角色。", 400)
@@ -385,6 +389,21 @@ def build_app(database_path: Path | None = None) -> Flask:
             return error("请填写问题和背景说明。", 400)
         project.setdefault("issues", []).append({"id": max((item["id"] for item in project["issues"]), default=0) + 1, "owner_role": role, "status": "open", "title": title, "detail": detail, "category": str(body.get("category", "Scope")), "priority": str(body.get("priority", "中")), "pl_response": ""})
         return jsonify(public_pl_project(write_pl_project(project), role))
+
+    @app.post("/api/pl-projects/<project_id>/review-assistant")
+    def review_project_assistant(project_id):
+        body = request.get_json(silent=True) or {}
+        role, question = str(body.get("role", "")), str(body.get("question", "")).strip()
+        if role not in TEAM_ROLES:
+            return error("仅团队角色可以使用项目问答助手。", 403)
+        project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
+        if not project:
+            return error("未找到该新项目。", 404)
+        if project.get("confirmed") or project.get("review_phase") != "initial_review":
+            return error("项目问答助手仅在首次团队评审阶段可用。", 409)
+        if not question:
+            return error("请填写想了解的项目问题。", 400)
+        return jsonify({"reply": answer_review_assistant_question(project, role, question)})
 
     @app.post("/api/pl-projects/<project_id>/issues/<int:issue_id>/respond")
     def respond_pl_project_issue(project_id, issue_id):

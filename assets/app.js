@@ -114,6 +114,22 @@ function projectLink(project, role) {
   return project.pl_project ? `new-project.html?project_id=${encodeURIComponent(project.id)}` : `project-view.html?project=${encodeURIComponent(project.id)}`;
 }
 
+let reviewAssistantProjectId = null;
+
+function appendReviewAssistantMessage(role, text) {
+  const log = document.querySelector('#review-assistant-log');
+  const message = document.createElement('div');
+  message.className = `message ${role}`;
+  const avatar = document.createElement('span');
+  avatar.className = 'avatar';
+  avatar.textContent = role === 'user' ? currentRole().slice(0, 2).toUpperCase() : 'AI';
+  const body = document.createElement('div');
+  const paragraph = document.createElement('p');
+  paragraph.textContent = text;
+  body.append(paragraph); message.append(avatar, body); log.append(message);
+  log.scrollTop = log.scrollHeight;
+}
+
 function renderPlRoleReview(state, role) {
   document.querySelector('#role-review-title').textContent = `${state.name} · 团队评审`;
   document.querySelector('#role-review-role').textContent = role;
@@ -134,6 +150,15 @@ function renderPlRoleReview(state, role) {
   const firstRound = state.review_phase === 'initial_review', finalRound = state.review_phase === 'final_review';
   document.querySelectorAll('#role-review-app input,#role-review-app select,#role-review-app textarea,#submit-pl-issue,#submit-pl-review').forEach(node => node.disabled = task.status !== 'pending');
   document.querySelector('#initial-review-issue-form').hidden = !firstRound;
+  const assistant = document.querySelector('#role-review-assistant');
+  assistant.hidden = !firstRound;
+  document.querySelector('#review-assistant-question').disabled = !firstRound;
+  document.querySelector('#send-review-assistant').disabled = !firstRound;
+  if (firstRound && reviewAssistantProjectId !== state.id) {
+    reviewAssistantProjectId = state.id;
+    document.querySelector('#review-assistant-log').replaceChildren();
+    appendReviewAssistantMessage('ai', `我是项目问答助手，可以结合当前方案和“${state.role_focus}”回答你的评审问题。`);
+  }
   document.querySelector('#submit-pl-review').textContent = finalRound ? '提交最终结论 →' : '完成首次评审 →';
   const issues = state.my_issues || [];
   document.querySelector('#pl-my-issues').innerHTML = issues.length ? issues.map(issue => `<div class="check ${issue.status === 'closed' ? 'good' : issue.status === 'open' ? 'high' : ''}"><b>${escapeHtml(issue.title)} · ${escapeHtml(statusText(issue.status))}</b><span>${escapeHtml(issue.detail)}</span>${issue.pl_response ? `<span><b>PL 回复：</b>${escapeHtml(issue.pl_response)}</span>` : ''}${issue.status === 'awaiting_submitter' ? `<button class="button secondary issue-confirm-action" type="button" data-pl-issue-confirm="${issue.id}">确认直接回复已解决</button>` : ''}${issue.status === 'meeting_required' && state.review_phase === 'final_review' ? `<button class="button secondary issue-confirm-action" type="button" data-pl-issue-confirm="${issue.id}">确认会议项已解决</button>` : ''}</div>`).join('') : '<div class="empty">尚未提交 Issue。</div>';
@@ -148,6 +173,26 @@ async function setupPlRoleReview() {
   await load();
   document.querySelector('#submit-pl-issue').addEventListener('click', async () => { try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/issues`, {method:'POST', body:JSON.stringify({role, category:document.querySelector('#pl-issue-category').value, priority:document.querySelector('#pl-issue-priority').value, title:document.querySelector('#pl-issue-title').value.trim(), detail:document.querySelector('#pl-issue-detail').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', 'Issue 已提交给 PL。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
   document.querySelector('#submit-pl-review').addEventListener('click', async () => { try { const current = await api(`/api/pl-projects/${encodeURIComponent(projectId)}?role=${encodeURIComponent(role)}`); const endpoint = current.review_phase === 'final_review' ? 'final-reviews' : 'reviews'; const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/${endpoint}`, {method:'POST', body:JSON.stringify({role, conclusion:document.querySelector('#pl-review-conclusion').value.trim()})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', current.review_phase === 'final_review' ? '最终结论已提交。' : '首次评审已提交。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
+  const askReviewAssistant = async () => {
+    const input = document.querySelector('#review-assistant-question');
+    const question = input.value.trim();
+    if (!question) return setFeedback('#review-assistant-feedback', '请先输入想了解的项目问题。', true);
+    const button = document.querySelector('#send-review-assistant');
+    button.disabled = true;
+    try {
+      appendReviewAssistantMessage('user', question);
+      const answer = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/review-assistant`, {method:'POST', body:JSON.stringify({role, question})});
+      input.value = '';
+      appendReviewAssistantMessage('ai', answer.reply);
+      setFeedback('#review-assistant-feedback', '已结合当前项目方案生成参考回答。');
+    } catch (error) {
+      setFeedback('#review-assistant-feedback', error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  document.querySelector('#send-review-assistant').addEventListener('click', askReviewAssistant);
+  document.querySelector('#review-assistant-question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); askReviewAssistant(); } });
   document.querySelector('#pl-my-issues').addEventListener('click', async event => { const button = event.target.closest('[data-pl-issue-confirm]'); if (!button) return; try { const state = await api(`/api/pl-projects/${encodeURIComponent(projectId)}/issues/${button.dataset.plIssueConfirm}/confirm`, {method:'POST', body:JSON.stringify({role})}); renderPlRoleReview(state, role); setFeedback('#pl-role-feedback', 'Issue 已确认关闭。'); } catch (error) { setFeedback('#pl-role-feedback', error.message, true); } });
 }
 

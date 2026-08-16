@@ -16,7 +16,7 @@ DisT 是一个面向产品准备度管理的本地交互原型。当前产品路
 
 工作流门禁：
 
-- 只有 Dsci、DA & RV、Ops 可以提交 Issue 与团队评审结论。
+- 只有 Dsci、DA & RV、Ops 可以提交 Issue 与团队评审结论；首次评审期间可使用项目问答助手了解当前方案、范围、风险和依赖。问答仅供参考，不会改变项目状态或替代正式评审操作。
 - PL 可回复 Issue；只有 Issue 的提出角色可以确认其关闭。
 - 首次评审完成后才能启动会议；会议纪要会持久化更新报告并开启最终评审。
 - 三方最终结论、所有 Issue 关闭，以及 PL 和三方 Leader Check 均完成后，PL 才能确认项目。
@@ -29,9 +29,9 @@ RI 与 Ecom 是只读的存量迭代快照，用于演示项目组合与角色�
 | 角色 | 入口 | 主要操作 |
 | --- | --- | --- |
 | PL | Overview、`new-project.html` | 创建方案、处理 Issue、推进评审、执行 Leader Check 与确认项目 |
-| Dsci | Overview 工作台、`role-review.html` | 方法论相关评审、提交/关闭本人 Issue、提交两轮结论 |
-| DA & RV | Overview 工作台、`role-review.html` | 数据与调研评审、提交/关闭本人 Issue、提交两轮结论 |
-| Ops | Overview 工作台、`role-review.html` | Scope、交付与运营评审、提交/关闭本人 Issue、提交两轮结论 |
+| Dsci | Overview 工作台、`role-review.html` | 方法论相关评审、首次评审项目问答、提交/关闭本人 Issue、提交两轮结论 |
+| DA & RV | Overview 工作台、`role-review.html` | 数据与调研评审、首次评审项目问答、提交/关闭本人 Issue、提交两轮结论 |
+| Ops | Overview 工作台、`role-review.html` | Scope、交付与运营评审、首次评审项目问答、提交/关闭本人 Issue、提交两轮结论 |
 
 角色通过侧边栏切换。角色选择仅用于本地界面演示，不构成认证或授权边界。
 

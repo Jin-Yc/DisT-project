@@ -10,13 +10,13 @@ class UiLayoutContractTest(unittest.TestCase):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html"):
             page = (ROOT / name).read_text(encoding="utf-8")
             self.assertIn("assets/app.css?v=9", page)
-            self.assertIn("assets/ui-polish.css?v=32", page)
-            self.assertIn("assets/app.js?v=16", page)
+            self.assertIn("assets/ui-polish.css?v=33", page)
+            self.assertIn("assets/app.js?v=17", page)
         new_project = (ROOT / "new-project.html").read_text(encoding="utf-8")
         self.assertIn("assets/app.css?v=9", new_project)
-        self.assertIn("assets/ui-polish.css?v=32", new_project)
-        self.assertIn("assets/app.js?v=16", new_project)
-        self.assertIn("assets/new-project.js?v=35", new_project)
+        self.assertIn("assets/ui-polish.css?v=33", new_project)
+        self.assertIn("assets/app.js?v=17", new_project)
+        self.assertIn("assets/new-project.js?v=36", new_project)
 
     def test_all_app_pages_include_a_project_navigation_container(self):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html", "new-project.html"):
@@ -45,6 +45,16 @@ class UiLayoutContractTest(unittest.TestCase):
         self.assertIn("textContent = planText", app_js)
         self.assertIn('class="button secondary issue-confirm-action"', app_js)
         self.assertIn("initial-review-issue-form').hidden = !firstRound", app_js)
+
+    def test_initial_review_has_a_project_context_ai_assistant_for_team_roles(self):
+        page = (ROOT / "role-review.html").read_text(encoding="utf-8")
+        app_js = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="role-review-assistant" hidden', page)
+        self.assertIn('id="review-assistant-question"', page)
+        self.assertIn('id="send-review-assistant"', page)
+        self.assertIn("/review-assistant", app_js)
+        self.assertIn("assistant.hidden = !firstRound", app_js)
+        self.assertIn("appendReviewAssistantMessage", app_js)
 
     def test_initial_review_distribution_and_explicit_flow_recovery_are_wired(self):
         page = (ROOT / "new-project.html").read_text(encoding="utf-8")
@@ -77,6 +87,43 @@ class UiLayoutContractTest(unittest.TestCase):
         self.assertIn('href="new-project.html?project_id=${encodeURIComponent(project.project_id)}"', app_js)
         self.assertNotIn(".role-pl .team-workspace{display:none}", app_css)
         self.assertIn("setFeedback('#team-task-list', `无法加载团队工作台：${error.message}`, true)", app_js)
+
+    def test_team_workspace_empty_state_is_centered_within_the_task_list(self):
+        css = (ROOT / "assets" / "ui-polish.css").read_text(encoding="utf-8")
+        self.assertIn(".team-task-list>.empty{grid-column:1/-1;display:grid;min-height:180px;place-items:center}", css)
+
+    def test_export_uses_one_markdown_builder_and_explicit_ppt_outline(self):
+        page = (ROOT / "new-project.html").read_text(encoding="utf-8")
+        script = (ROOT / "assets" / "new-project.js").read_text(encoding="utf-8")
+        self.assertIn('class="creator-export-layout"', page)
+        self.assertIn('id="export-ppt">下载 PPT 大纲', page)
+        self.assertIn("function buildExportMarkdown(item, projectContext)", script)
+        self.assertIn("text/markdown;charset=utf-8", script)
+        self.assertIn("-PPT大纲", script)
+        self.assertIn("$('#copy-summary').onclick = copySummary", script)
+
+    def test_confirmed_details_hide_leader_check_and_workflow_navigation(self):
+        page = (ROOT / "new-project.html").read_text(encoding="utf-8")
+        script = (ROOT / "assets" / "new-project.js").read_text(encoding="utf-8")
+        css = (ROOT / "assets" / "ui-polish.css").read_text(encoding="utf-8")
+        self.assertIn('id="creator-leader-check"', page)
+        self.assertIn('id="creator-workflow-nav"', page)
+        self.assertIn("$('#creator-leader-check').hidden = Boolean(plan?.confirmed)", script)
+        self.assertIn("$('#creator-workflow-nav').hidden = Boolean(plan?.confirmed)", script)
+        self.assertIn(".creator-tabs[hidden]{display:none}", css)
+        self.assertIn("data.confirmed !== true", script)
+        self.assertIn("clearConfirmedProjectCache", script)
+
+    def test_interview_send_handler_does_not_pass_pointer_event_and_keeps_question_navigation(self):
+        page = (ROOT / "new-project.html").read_text(encoding="utf-8")
+        script = (ROOT / "assets" / "new-project.js").read_text(encoding="utf-8")
+        self.assertIn('id="simulate-answer"', page)
+        self.assertNotIn("data-prompt=", page)
+        self.assertIn("$('#send-message').onclick = () => sendMessage()", script)
+        self.assertNotIn("$('#send-message').onclick = sendMessage", script)
+        self.assertNotIn("querySelectorAll('[data-prompt]')", script)
+        self.assertIn("if (!response.ok) throw new Error(data.error || 'AI 助手暂时无法响应。')", script)
+        self.assertIn("item.onkeydown = event", script)
 
     def test_role_changes_return_to_overview_and_pl_projects_restore_their_phase(self):
         app_js = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")

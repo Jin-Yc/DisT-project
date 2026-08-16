@@ -120,6 +120,21 @@ class WorkflowApiTest(unittest.TestCase):
             task_ids = [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"]]
             self.assertNotIn("discard-me", task_ids)
 
+    def test_team_role_can_ask_project_assistant_only_during_initial_review(self):
+        self.post("/api/pl-projects", {
+            "id": "pl-assistant",
+            "context": {"productName": "门店洞察"},
+            "finalPlan": {"scope": {"inScope": ["异常预警"], "outScope": ["实时数据"]}},
+        })
+        answer = self.post("/api/pl-projects/pl-assistant/review-assistant", {"role": "Dsci", "question": "首版范围是什么？"})
+        self.assertIn("异常预警", answer["reply"])
+        self.assertIn("方法论可行性", answer["reply"])
+        self.post("/api/pl-projects/pl-assistant/review-assistant", {"role": "PL", "question": "首版范围是什么？"}, expected=403)
+        for role in ("Dsci", "DA & RV", "Ops"):
+            self.post("/api/pl-projects/pl-assistant/reviews", {"role": role, "conclusion": "首次评审通过。"})
+        self.post("/api/pl-projects/pl-assistant/meeting/start")
+        self.post("/api/pl-projects/pl-assistant/review-assistant", {"role": "Dsci", "question": "首版范围是什么？"}, expected=409)
+
     def test_pl_project_meeting_required_issue_and_gates(self):
         self.post("/api/pl-projects", {"id": "pl-review", "context": {"productName": "门店洞察"}})
         issue = self.post("/api/pl-projects/pl-review/issues", {"role": "Dsci", "category": "Scope", "priority": "高", "title": "确认试点范围", "detail": "需要明确首发门店范围。"})

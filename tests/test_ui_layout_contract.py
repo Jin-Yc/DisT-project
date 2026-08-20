@@ -10,11 +10,11 @@ class UiLayoutContractTest(unittest.TestCase):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html"):
             page = (ROOT / name).read_text(encoding="utf-8")
             self.assertIn("assets/app.css?v=9", page)
-            self.assertIn("assets/ui-polish.css?v=35", page)
+            self.assertIn("assets/ui-polish.css?v=36", page)
             self.assertIn("assets/app.js?v=19", page)
         new_project = (ROOT / "new-project.html").read_text(encoding="utf-8")
         self.assertIn("assets/app.css?v=9", new_project)
-        self.assertIn("assets/ui-polish.css?v=35", new_project)
+        self.assertIn("assets/ui-polish.css?v=36", new_project)
         self.assertIn("assets/app.js?v=19", new_project)
         self.assertIn("assets/new-project.js?v=37", new_project)
 
@@ -160,6 +160,16 @@ class UiLayoutContractTest(unittest.TestCase):
         css = (ROOT / "assets" / "ui-polish.css").read_text(encoding="utf-8")
         self.assertIn(".role-work-card>.form-grid+.actions,.role-work-card>.actions+.input-label,.role-work-card>.summary-item+.input-label{margin-top:18px}", css)
         self.assertIn(".role-work-card>textarea+.check-list{margin-top:10px}", css)
+
+    def test_project_detail_schedule_actions_and_rows_are_responsive(self):
+        css = (ROOT / "assets" / "ui-polish.css").read_text(encoding="utf-8")
+        self.assertIn(".project-schedule-editor>.card-head{padding-bottom:16px;border-bottom:1px solid var(--line)}", css)
+        self.assertIn(".schedule-actions .button:first-child{margin-right:auto}", css)
+        self.assertIn(".schedule-row{display:grid;grid-template-columns:minmax(0,1fr) 180px auto;align-items:center;gap:12px;padding:10px 12px", css)
+        self.assertIn(".work-package-row{display:grid;grid-template-columns:110px minmax(150px,1.3fr) 145px 145px minmax(120px,1fr) 100px auto;gap:12px", css)
+        self.assertIn(".schedule-row,.work-package-row{grid-template-columns:1fr;padding:12px}", css)
+        self.assertIn(".project-milestone-list+#iteration-task-list{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}", css)
+        self.assertIn(".project-schedule-editor .schedule-work-packages+.actions{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}", css)
 
 
 if __name__ == "__main__":

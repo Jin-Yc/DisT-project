@@ -8,10 +8,16 @@ import os
 import sqlite3
 import urllib.error
 import urllib.request
+from datetime import date
+from io import BytesIO
 from contextlib import closing
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_file, send_from_directory
+from docx import Document
+from pypdf import PdfReader
+from pptx import Presentation
+from pptx.util import Pt
 
 
 ROOT = Path(__file__).resolve().parent
@@ -115,7 +121,20 @@ def build_app(database_path: Path | None = None) -> Flask:
         state.setdefault("confirmed", False)
         state.setdefault("stage", "团队评审中")
         state.setdefault("readiness", "等待团队评审")
+        schedule = state.setdefault("schedule", {})
+        schedule.setdefault("minutes", "")
+        schedule.setdefault("analysis", "")
+        schedule.setdefault("team_schedules", {role: "待排期会议分析" for role in TEAM_ROLES})
+        schedule.setdefault("work_packages", [])
+        schedule.setdefault("confirmed", False)
+        schedule.setdefault("milestones", [])
+        # Kept for backwards-compatible reads of historic records.  New
+        # schedules distribute structured work packages instead.
+        schedule.setdefault("tasks", {})
         return state
+
+    def project_workflow_kind(project: dict) -> str:
+        return "迭代项目" if project.get("context", {}).get("projectType") == "产品迭代" else "PL 新项目"
 
     def public_pl_project(state: dict, role: str | None = None) -> dict:
         project = copy.deepcopy(normalise_pl_project(state))
@@ -132,15 +151,15 @@ def build_app(database_path: Path | None = None) -> Flask:
         phase = project["review_phase"]
         first_review_ready = all(task["status"] == "submitted" for task in project["first_review_tasks"].values())
         final_review_ready = all(task["status"] == "submitted" for task in project["final_review_tasks"].values())
-        leader_check_ready = all(check["confirmed"] for check in project["leader_checks"].values())
+        leader_check_ready = all(check["confirmed"] for role, check in project["leader_checks"].items() if role in TEAM_ROLES)
         action = {
             "initial_review": "启动会议" if first_review_ready else "等待三方首次评审",
             "meeting": "更新报告并发起最终评审",
             "final_review": "完成最终评审" if final_review_ready else "查看最终评审进度",
-            "final_complete": "确认项目" if leader_check_ready else "等待 Leader Check",
+            "final_complete": "确认项目" if leader_check_ready else "等待最终评审确认",
         }[phase]
         return {
-            "kind": "PL 新项目",
+            "kind": project_workflow_kind(project),
             "project_id": project["id"],
             "project": project["name"],
             "title": f"{project['name']}：{action}",
@@ -296,10 +315,11 @@ def build_app(database_path: Path | None = None) -> Flask:
         ]
         pl_projects = read_pl_projects()
         confirmed_pl_projects = [item for item in pl_projects if item.get("confirmed")]
-        projects.extend({"id": item["id"], "name": item["name"], "type": "PL 新项目", "stage": item["stage"], "readiness": item["readiness"], "next": "查看项目概览", "pl_project": True} for item in confirmed_pl_projects)
+        projects.extend({"id": item["id"], "name": item["name"], "type": "产品迭代" if project_workflow_kind(item) == "迭代项目" else "PL 新项目", "stage": item["stage"], "readiness": item["readiness"], "next": "查看项目概览", "pl_project": True} for item in confirmed_pl_projects)
         if role == "PL":
             pending_projects = [pl_pending_project(item) for item in pl_projects if not item.get("confirmed")]
-            return jsonify({"projects": projects, "role": role, "pending_projects": pending_projects})
+            gantt = [{"project": item["name"], **package} for item in confirmed_pl_projects if item["schedule"].get("confirmed") for package in item["schedule"].get("work_packages", [])]
+            return jsonify({"projects": projects, "role": role, "pending_projects": pending_projects, "gantt": gantt})
         if role not in TEAM_ROLES:
             return error("未识别的角色。", 400)
         tasks = [
@@ -315,14 +335,22 @@ def build_app(database_path: Path | None = None) -> Flask:
             )
             if actionable:
                 action = "提交首次评审（可确认无 Issue）" if phase == "initial_review" else "确认会议项已解决并提交最终结论"
-                tasks.append({"kind": "PL 新项目", "title": f"{project['name']}：{action}", "status": task["status"],
+                tasks.append({"kind": project_workflow_kind(project), "title": f"{project['name']}：{action}", "status": task["status"],
                               "phase": phase, "action": action, "state": project["stage"], "due_date": "待处理",
-                              "project": project["name"], "project_id": project["id"], "pl_project": True})
+                              "project": project["name"], "project_id": project["id"], "pl_project": True, "review_task": True})
             if phase == "final_complete" and not project["leader_checks"][role]["confirmed"]:
-                tasks.append({"kind": "PL 新项目", "title": f"{project['name']}：完成 Leader Check", "status": "pending",
+                tasks.append({"kind": project_workflow_kind(project), "title": f"{project['name']}：完成 Leader Check", "status": "pending",
                               "phase": phase, "action": "确认最终方案", "state": project["stage"], "due_date": "待处理",
-                              "project": project["name"], "project_id": project["id"], "pl_project": True})
-        return jsonify({"projects": projects, "role": role, "role_focus": ROLE_FOCUS[role], "tasks": tasks})
+                              "project": project["name"], "project_id": project["id"], "pl_project": True, "review_task": True})
+            if project.get("confirmed") and project["schedule"].get("confirmed"):
+                for package in project["schedule"].get("work_packages", []):
+                    if package.get("role") == role:
+                        tasks.append({"kind": "迭代" if project_workflow_kind(project) == "迭代项目" else "新产品",
+                                      "title": package["title"], "status": package.get("status", "待开始"),
+                                      "due_date": package.get("due_date", "待排期"), "project": project["name"],
+                                      "project_id": project["id"], "pl_project": True, "execution_task": True})
+        gantt = [{"project": item["name"], **package} for item in confirmed_pl_projects if item["schedule"].get("confirmed") for package in item["schedule"].get("work_packages", []) if package.get("role") == role]
+        return jsonify({"projects": projects, "role": role, "role_focus": ROLE_FOCUS[role], "tasks": tasks, "gantt": gantt})
 
     @app.post("/api/pl-projects")
     def create_pl_project():
@@ -382,12 +410,12 @@ def build_app(database_path: Path | None = None) -> Flask:
         if role not in TEAM_ROLES:
             return error("仅团队角色可以提交 Issue。", 403)
         project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
-        if not project or project.get("review_phase") != "initial_review" or project.get("confirmed"):
-            return error("仅首次评审阶段可以新增 Issue。")
+        if not project or project.get("review_phase") not in {"initial_review", "final_review"} or project.get("confirmed"):
+            return error("仅团队评审阶段可以新增 Issue。")
         title, detail = str(body.get("title", "")).strip(), str(body.get("detail", "")).strip()
         if not title or not detail:
             return error("请填写问题和背景说明。", 400)
-        project.setdefault("issues", []).append({"id": max((item["id"] for item in project["issues"]), default=0) + 1, "owner_role": role, "status": "open", "title": title, "detail": detail, "category": str(body.get("category", "Scope")), "priority": str(body.get("priority", "中")), "pl_response": ""})
+        project.setdefault("issues", []).append({"id": max((item["id"] for item in project["issues"]), default=0) + 1, "owner_role": role, "status": "open", "title": title, "detail": detail, "category": str(body.get("category", "Scope")), "priority": str(body.get("priority", "中")), "pl_response": "", "review_phase": project["review_phase"]})
         return jsonify(public_pl_project(write_pl_project(project), role))
 
     @app.post("/api/pl-projects/<project_id>/review-assistant")
@@ -413,7 +441,7 @@ def build_app(database_path: Path | None = None) -> Flask:
         response = str(body.get("response", "")).strip()
         if not issue or not response:
             return error("请填写 PL 处理说明。", 400)
-        if project.get("review_phase") != "initial_review" or issue["status"] != "open":
+        if project.get("review_phase") not in {"initial_review", "final_review"} or issue["status"] != "open":
             return error("该 Issue 当前无法回复。")
         action = body.get("action", "direct")
         if action not in {"direct", "meeting_required"}:
@@ -421,6 +449,8 @@ def build_app(database_path: Path | None = None) -> Flask:
         issue["pl_response"], issue["resolution"] = response, action
         issue["status"] = "awaiting_submitter" if action == "direct" else "meeting_required"
         project["meeting_items_recorded"] = any(item["status"] == "meeting_required" for item in project["issues"])
+        if action == "meeting_required" and project["review_phase"] == "final_review":
+            project.update({"review_phase": "meeting", "stage": "会议进行中", "readiness": "等待会议纪要更新报告"})
         return jsonify(public_pl_project(write_pl_project(project)))
 
     @app.post("/api/pl-projects/<project_id>/issues/<int:issue_id>/confirm")
@@ -431,7 +461,7 @@ def build_app(database_path: Path | None = None) -> Flask:
         issue = next((item for item in (project or {}).get("issues", []) if item["id"] == issue_id), None)
         if not issue or issue["owner_role"] != role:
             return error("仅提出 Issue 的角色可以确认关闭。", 403)
-        if issue["status"] == "awaiting_submitter" and project.get("review_phase") == "initial_review":
+        if issue["status"] == "awaiting_submitter" and project.get("review_phase") in {"initial_review", "final_review"}:
             pass
         elif issue["status"] == "meeting_required" and project.get("review_phase") == "final_review":
             pass
@@ -487,6 +517,8 @@ def build_app(database_path: Path | None = None) -> Flask:
                         "final_plan": result["updatedPlan"], "report_version": int(project.get("report_version", 1)) + 1,
                         "review_phase": "final_review", "stage": "最终评审中", "readiness": "等待三方最终结论"})
         project["final_review_tasks"] = {role: {"status": "pending", "conclusion": ""} for role in TEAM_ROLES}
+        for role in TEAM_ROLES:
+            project["leader_checks"][role] = {"viewed": False, "confirmed": False, "note": ""}
         return jsonify(public_pl_project(write_pl_project(project)))
 
     @app.post("/api/pl-projects/<project_id>/final-reviews")
@@ -506,6 +538,7 @@ def build_app(database_path: Path | None = None) -> Flask:
         if not conclusion:
             return error("请填写最终评审结论。", 400)
         project["final_review_tasks"][role] = {"status": "submitted", "conclusion": conclusion}
+        project["leader_checks"][role].update({"viewed": True, "confirmed": True, "note": conclusion})
         return jsonify(public_pl_project(write_pl_project(project), role))
 
     @app.post("/api/pl-projects/<project_id>/final-reviews/complete")
@@ -519,7 +552,8 @@ def build_app(database_path: Path | None = None) -> Flask:
             return error("需等待三方最终结论，并确认所有会议项已解决。")
         for role in TEAM_ROLES:
             project["final_review_tasks"][role]["status"] = "completed"
-        project.update({"review_phase": "final_complete", "stage": "等待 Leader Check", "readiness": "最终评审完成"})
+        project["leader_checks"]["PL"].update({"viewed": True, "confirmed": True, "note": "团队最终评审已完成"})
+        project.update({"review_phase": "final_complete", "stage": "等待 PL 确认", "readiness": "最终评审完成"})
         return jsonify(public_pl_project(write_pl_project(project)))
 
     @app.post("/api/pl-projects/<project_id>/leader-checks")
@@ -548,12 +582,103 @@ def build_app(database_path: Path | None = None) -> Flask:
             project.get("review_phase") == "final_complete"
             and all(project["final_review_tasks"].get(role, {}).get("status") == "completed" for role in TEAM_ROLES)
             and not any(item.get("status") != "closed" for item in project.get("issues", []))
-            and all(project["leader_checks"].get(role, {}).get("confirmed") for role in ("PL", *TEAM_ROLES))
+            and all(project["leader_checks"].get(role, {}).get("confirmed") for role in TEAM_ROLES)
         )
         if not ready:
             return error("确认项目需处于等待 PL 确认阶段，三方任务完成、Issue 全部关闭且所有 Leader Check 已确认。")
         project.update({"confirmed": True, "stage": "项目已确认", "readiness": "可进入项目执行"})
         return jsonify(public_pl_project(write_pl_project(project), "PL"))
+
+    @app.post("/api/pl-projects/<project_id>/schedule")
+    def update_pl_project_schedule(project_id):
+        body = request.get_json(silent=True) or {}
+        if body.get("role") != "PL":
+            return error("仅 PL 可以维护项目排期。", 403)
+        project = next((item for item in read_pl_projects() if item["id"] == project_id), None)
+        if not project or not project.get("confirmed"):
+            return error("仅已确认项目可以维护排期。", 409)
+        milestones = body.get("milestones", [])
+        team_schedules, work_packages = body.get("team_schedules", {}), body.get("work_packages", [])
+        if not isinstance(milestones, list) or not isinstance(team_schedules, dict) or not isinstance(work_packages, list):
+            return error("排期数据格式无效。", 400)
+        cleaned_milestones = []
+        for item in milestones:
+            if not isinstance(item, dict):
+                return error("排期节点格式无效。", 400)
+            title, due_date = str(item.get("title", "")).strip(), str(item.get("due_date", "")).strip()
+            if title or due_date:
+                if not title or not due_date:
+                    return error("每个关键节点必须包含名称和日期。", 400)
+                try:
+                    date.fromisoformat(due_date)
+                except ValueError:
+                    return error("关键节点日期必须为有效日期。", 400)
+                cleaned_milestones.append({"title": title, "due_date": due_date})
+        cleaned_schedules = {}
+        for role in TEAM_ROLES:
+            cleaned_schedules[role] = str(team_schedules.get(role, "")).strip()
+        if not work_packages or any(not isinstance(item, dict) for item in work_packages):
+            return error("请至少确认一个可分发的团队工作包。", 400)
+        cleaned_packages = [{key: str(item.get(key, "")).strip() for key in ("role", "title", "start_date", "due_date", "dependency")} | {"status": str(item.get("status", "待开始")).strip() or "待开始"} for item in work_packages]
+        if any(item["role"] not in TEAM_ROLES or not all(item[key] for key in ("title", "start_date", "due_date")) for item in cleaned_packages):
+            return error("每个工作包必须包含团队、任务、开始日和截止日。", 400)
+        try:
+            if any(date.fromisoformat(item["start_date"]) > date.fromisoformat(item["due_date"]) for item in cleaned_packages):
+                return error("工作包的开始日期不能晚于截止日期。", 400)
+        except ValueError:
+            return error("工作包日期必须为有效日期。", 400)
+        project["schedule"].update({"minutes": str(body.get("minutes", "")).strip(), "milestones": cleaned_milestones, "team_schedules": cleaned_schedules, "work_packages": cleaned_packages, "confirmed": True})
+        return jsonify(public_pl_project(write_pl_project(project), "PL"))
+
+    @app.post("/api/pl-projects/<project_id>/schedule/analyze")
+    def analyze_pl_project_schedule(project_id):
+        project = next((item for item in read_pl_projects() if item["id"] == project_id and item.get("confirmed")), None)
+        if not project:
+            return error("仅已确认项目可以分析排期纪要。", 409)
+        minutes = request.form.get("minutes", "").strip()
+        uploaded = request.files.get("file")
+        if uploaded and uploaded.filename:
+            suffix = Path(uploaded.filename).suffix.lower()
+            raw = uploaded.read()
+            if suffix in {".txt", ".md"}:
+                minutes = raw.decode("utf-8", errors="ignore") or minutes
+            elif suffix == ".docx":
+                minutes = "\n".join(paragraph.text for paragraph in Document(BytesIO(raw)).paragraphs if paragraph.text.strip()) or minutes
+            elif suffix == ".pdf":
+                minutes = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(raw)).pages) or minutes
+            else:
+                return error("仅支持 TXT、Markdown、Word DOCX 和 PDF 纪要。", 400)
+        if not minutes:
+            return error("请粘贴或上传排期会议纪要。", 400)
+        name = project["name"]
+        suggestions = {role: f"围绕{ROLE_FOCUS[role]}确认 {name} 的排期依赖与交付顺序。" for role in TEAM_ROLES}
+        milestones = [{"title": "范围与依赖确认", "due_date": "2026-08-21"}, {"title": "试点/交付验收", "due_date": "2026-08-29"}]
+        packages = [{"role": "Dsci", "title": "方法与标准复核", "start_date": "2026-08-20", "due_date": "2026-08-23", "dependency": "范围确认", "status": "待开始"}, {"role": "DA & RV", "title": "数据口径与样本核对", "start_date": "2026-08-21", "due_date": "2026-08-26", "dependency": "方法复核", "status": "待开始"}, {"role": "Ops", "title": "上线窗口与验收准备", "start_date": "2026-08-26", "due_date": "2026-08-29", "dependency": "数据核对", "status": "待开始"}]
+        return jsonify({"minutes": minutes, "analysis": f"已从排期纪要提取 {name} 的协作重点与日期草案；请由 PL 确认后分发。", "milestones": milestones, "team_schedules": suggestions, "work_packages": packages})
+
+    @app.get("/api/pl-projects/<project_id>/export/pptx")
+    def export_pl_project_pptx(project_id):
+        project = next((item for item in read_pl_projects() if item["id"] == project_id and item.get("confirmed")), None)
+        if not project:
+            return error("仅已确认项目可以导出 PPT。", 409)
+        plan, schedule = project.get("final_plan", {}), project.get("schedule", {})
+        deck = Presentation()
+        def add_slide(title: str, lines: list[str]):
+            slide = deck.slides.add_slide(deck.slide_layouts[1]); slide.shapes.title.text = title
+            frame = slide.placeholders[1].text_frame; frame.clear()
+            for index, line in enumerate(lines):
+                paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph(); paragraph.text = line; paragraph.font.size = Pt(20)
+        add_slide(project["name"], [project["context"].get("projectType", "产品方案"), project["context"].get("iterationVersion", "已确认方案")])
+        positioning = plan.get("positioning", {}); add_slide("产品定位", [f"背景：{positioning.get('background', '待确认')}", f"目标客户：{positioning.get('target', '待确认')}", f"价值主张：{positioning.get('value', '待确认')}"])
+        scope = plan.get("scope", {}); add_slide("范围定义", ["包含：" + "；".join(scope.get("inScope", [])), "暂不包含：" + "；".join(scope.get("outScope", []))])
+        business = plan.get("business", {}); add_slide("业务要求", ["数据：" + "；".join(business.get("data", [])), "指标：" + "；".join(business.get("metrics", [])), "交付：" + "；".join(business.get("delivery", []))])
+        risks = plan.get("risks", {}); add_slide("风险与依赖", ["风险：" + "；".join(risks.get("risks", [])), "依赖：" + "；".join(risks.get("dependencies", []))])
+        add_slide("行动项与排期", [
+            "节点：" + "；".join(f"{item.get('title', '')}（{item.get('due_date', '待定')}）" for item in schedule.get("milestones", [])),
+            *[f"{item.get('role', '团队')}：{item.get('title', '待排期')}（{item.get('start_date', '待定')} 至 {item.get('due_date', '待定')}）" for item in schedule.get("work_packages", [])],
+        ])
+        output = BytesIO(); deck.save(output); output.seek(0)
+        return send_file(output, as_attachment=True, download_name=f"{project['name']}-项目简报.pptx", mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation")
 
     @app.post("/api/positioning-assistant")
     def positioning_assistant_api():
@@ -584,11 +709,28 @@ def build_app(database_path: Path | None = None) -> Flask:
     @app.get("/api/projects/<project_id>")
     def get_iteration_project(project_id: str):
         project = ITERATION_PROJECTS.get(project_id)
-        if not project:
-            return error("该模拟项目不存在。", 404)
         role = request.args.get("role", "PL")
         if role not in {"PL", *TEAM_ROLES}:
             return error("未识别的角色。", 400)
+        if not project:
+            pl_project = next((item for item in read_pl_projects() if item["id"] == project_id and item.get("confirmed")), None)
+            if not pl_project:
+                return error("未找到该项目。", 404)
+            plan = pl_project.get("final_plan", {})
+            scope = plan.get("scope", {})
+            risks = plan.get("risks", {})
+            result = {
+                "id": pl_project["id"], "name": pl_project["name"], "type": pl_project["context"].get("projectType", "新产品 Launch"),
+                "stage": pl_project["stage"], "readiness": pl_project["readiness"], "objective": pl_project["context"].get("projectDesc", ""),
+                "iteration": pl_project["context"].get("iterationVersion") or "已确认方案", "scope": "；".join(scope.get("inScope", [])) or "待补充范围",
+                "risk": "；".join(risks.get("risks", [])) or "暂无已识别风险",
+                "schedule": pl_project["schedule"], "pl_project": True, "context": pl_project["context"], "final_plan": plan,
+            }
+            result["role"] = role
+            result["my_work_packages"] = [] if role == "PL" else [
+                package for package in pl_project["schedule"].get("work_packages", []) if package.get("role") == role
+            ]
+            return jsonify(result)
         result = copy.deepcopy(project)
         result["role"] = role
         result["my_task"] = None if role == "PL" else result["tasks"][role]

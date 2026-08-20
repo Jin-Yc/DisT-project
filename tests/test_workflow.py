@@ -2,10 +2,12 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from io import BytesIO
 from contextlib import closing
 from pathlib import Path
 
 from app import build_app
+from pptx import Presentation
 
 
 class WorkflowApiTest(unittest.TestCase):
@@ -73,17 +75,10 @@ class WorkflowApiTest(unittest.TestCase):
             self.post("/api/pl-projects/pl-demo/final-reviews", {"role": role, "conclusion": f"{role} 最终通过。"})
         self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "完成最终评审")
         self.post("/api/pl-projects/pl-demo/final-reviews/complete")
-        self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "等待 Leader Check")
+        self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "确认项目")
         for role in ("Dsci", "DA & RV", "Ops"):
-            task = next(item for item in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"] if item["project_id"] == "pl-demo")
-            self.assertEqual(task["phase"], "final_complete")
-            self.assertEqual(task["action"], "确认最终方案")
-        self.post("/api/pl-projects/pl-demo/leader-checks", {"role": "Dsci", "confirmed": True})
-        dsci_tasks = self.client.get("/api/overview", query_string={"role": "Dsci"}).get_json()["tasks"]
-        self.assertNotIn("pl-demo", [task["project_id"] for task in dsci_tasks])
-        self.assertIn("pl-demo", [task["project_id"] for task in self.client.get("/api/overview", query_string={"role": "Ops"}).get_json()["tasks"]])
-        for role in ("PL", "DA & RV", "Ops"):
-            self.post("/api/pl-projects/pl-demo/leader-checks", {"role": role, "confirmed": True})
+            task_ids = [item["project_id"] for item in self.client.get("/api/overview", query_string={"role": role}).get_json()["tasks"]]
+            self.assertNotIn("pl-demo", task_ids)
         self.assertEqual(self.client.get("/api/overview?role=PL").get_json()["pending_projects"][0]["action"], "确认项目")
         self.post("/api/pl-projects/pl-demo/confirm")
         confirmed = self.client.get("/api/overview").get_json()
@@ -201,7 +196,9 @@ class WorkflowApiTest(unittest.TestCase):
         self.post("/api/pl-projects/pl-final/meeting/start")
         self.post("/api/pl-projects/pl-final/meeting", {"minutes": "会议确认方案与范围。"})
         self.post("/api/pl-projects/pl-final/reviews", {"role": "Dsci", "conclusion": "再次提交"}, expected=409)
-        self.post("/api/pl-projects/pl-final/issues", {"role": "Dsci", "title": "不应创建", "detail": "阶段错误"}, expected=409)
+        issue = self.post("/api/pl-projects/pl-final/issues", {"role": "Dsci", "title": "最终确认范围", "detail": "最终评审可继续提出 Issue"})["my_issues"][-1]
+        self.post(f"/api/pl-projects/pl-final/issues/{issue['id']}/respond", {"response": "已补充范围", "action": "direct"})
+        self.post(f"/api/pl-projects/pl-final/issues/{issue['id']}/confirm", {"role": "Dsci"})
         self.post("/api/pl-projects/pl-final/leader-checks", {"role": "PL", "confirmed": True}, expected=409)
         for role in ("Dsci", "DA & RV", "Ops"):
             self.post("/api/pl-projects/pl-final/final-reviews", {"role": role, "conclusion": "最终同意"})
@@ -236,6 +233,63 @@ class WorkflowApiTest(unittest.TestCase):
         self.assertEqual(project["my_task"]["title"], "确认 Ecom 验收标准")
         tasks = self.client.get("/api/overview?role=Ops").get_json()["tasks"]
         self.assertEqual([task["project"] for task in tasks[:2]], ["RI", "Ecom"])
+
+    def test_confirmed_iteration_project_uses_iteration_workflow_label_and_persists_schedule(self):
+        state = {
+            "id": "iteration-confirmed", "name": "门店洞察", "context": {"productName": "门店洞察", "projectType": "产品迭代", "projectDesc": "优化门店洞察输出", "iterationVersion": "v1.3"},
+            "final_plan": {"scope": {"inScope": ["标签优化"]}, "risks": {"risks": ["依赖数据字段确认"]}},
+            "confirmed": True, "stage": "项目已确认", "readiness": "可进入项目执行",
+        }
+        with closing(sqlite3.connect(self.app.config["DATABASE"])) as db, db:
+            db.execute("INSERT INTO pl_project_state VALUES (?, ?)", (state["id"], json.dumps(state, ensure_ascii=False)))
+
+        overview = self.client.get("/api/overview?role=Dsci").get_json()
+        self.assertEqual(next(item for item in overview["projects"] if item["id"] == state["id"])["type"], "产品迭代")
+        saved = self.post(f"/api/pl-projects/{state['id']}/schedule", {
+            "role": "PL", "minutes": "会议确认 8 月 30 日完成试点。",
+            "milestones": [{"title": "试点验收", "due_date": "2026-08-30"}],
+            "team_schedules": {"Dsci": "验证标签效果", "DA & RV": "核对样本", "Ops": "安排试点"},
+            "work_packages": [{"role": "Dsci", "title": "验证标签效果", "start_date": "2026-08-24", "due_date": "2026-08-30", "dependency": "范围确认", "status": "待开始"}],
+        })
+        self.assertEqual(saved["schedule"]["milestones"][0]["title"], "试点验收")
+        detail = self.client.get(f"/api/projects/{state['id']}?role=Dsci").get_json()
+        self.assertTrue(detail["pl_project"])
+        self.assertEqual(detail["schedule"]["team_schedules"]["Dsci"], "验证标签效果")
+        self.assertEqual(detail["my_work_packages"][0]["title"], "验证标签效果")
+        self.assertEqual(self.client.get("/api/overview?role=Dsci").get_json()["gantt"][-1]["project"], "门店洞察")
+
+    def test_schedule_analysis_creates_editable_work_packages_before_distribution(self):
+        state = {
+            "id": "schedule-draft", "name": "排期草案", "context": {"productName": "排期草案"},
+            "confirmed": True, "stage": "项目已确认", "readiness": "可进入项目执行",
+        }
+        with closing(sqlite3.connect(self.app.config["DATABASE"])) as db, db:
+            db.execute("INSERT INTO pl_project_state VALUES (?, ?)", (state["id"], json.dumps(state, ensure_ascii=False)))
+
+        analysis = self.client.post(f"/api/pl-projects/{state['id']}/schedule/analyze", data={"minutes": "8 月 23 日 Dsci 完成方法复核。"})
+        self.assertEqual(analysis.status_code, 200, analysis.get_json())
+        draft = analysis.get_json()
+        self.assertEqual(draft["work_packages"][0]["role"], "Dsci")
+        self.assertTrue(draft["work_packages"][0]["start_date"])
+        self.assertEqual(self.client.get("/api/overview?role=Dsci").get_json()["gantt"], [])
+
+        rejected = self.client.post(f"/api/pl-projects/{state['id']}/schedule", json={"role": "PL", "milestones": [], "team_schedules": {}, "work_packages": []})
+        self.assertEqual(rejected.status_code, 400, rejected.get_json())
+
+    def test_confirmed_project_exports_a_six_slide_editable_presentation(self):
+        state = {
+            "id": "ppt-export", "name": "导出验证", "context": {"productName": "导出验证"}, "final_plan": {},
+            "confirmed": True, "stage": "项目已确认", "readiness": "可进入项目执行",
+            "schedule": {"milestones": [{"title": "试点验收", "due_date": "2026-08-29"}], "work_packages": [{"role": "Ops", "title": "验收准备", "start_date": "2026-08-26", "due_date": "2026-08-29"}]},
+        }
+        with closing(sqlite3.connect(self.app.config["DATABASE"])) as db, db:
+            db.execute("INSERT INTO pl_project_state VALUES (?, ?)", (state["id"], json.dumps(state, ensure_ascii=False)))
+        response = self.client.get(f"/api/pl-projects/{state['id']}/export/pptx")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        deck = Presentation(BytesIO(response.data))
+        self.assertEqual(len(deck.slides), 6)
+        self.assertIn("导出验证", deck.slides[0].shapes.title.text)
 
     def test_meeting_minutes_update_the_current_plan(self):
         current_plan = {

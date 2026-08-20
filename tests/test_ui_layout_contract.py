@@ -10,13 +10,13 @@ class UiLayoutContractTest(unittest.TestCase):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html"):
             page = (ROOT / name).read_text(encoding="utf-8")
             self.assertIn("assets/app.css?v=9", page)
-            self.assertIn("assets/ui-polish.css?v=33", page)
-            self.assertIn("assets/app.js?v=17", page)
+            self.assertIn("assets/ui-polish.css?v=35", page)
+            self.assertIn("assets/app.js?v=19", page)
         new_project = (ROOT / "new-project.html").read_text(encoding="utf-8")
         self.assertIn("assets/app.css?v=9", new_project)
-        self.assertIn("assets/ui-polish.css?v=33", new_project)
-        self.assertIn("assets/app.js?v=17", new_project)
-        self.assertIn("assets/new-project.js?v=36", new_project)
+        self.assertIn("assets/ui-polish.css?v=35", new_project)
+        self.assertIn("assets/app.js?v=19", new_project)
+        self.assertIn("assets/new-project.js?v=37", new_project)
 
     def test_all_app_pages_include_a_project_navigation_container(self):
         for name in ("index.html", "workflow.html", "role-workflow.html", "project-view.html", "role-review.html", "new-project.html"):
@@ -26,9 +26,23 @@ class UiLayoutContractTest(unittest.TestCase):
     def test_confirmed_pl_projects_use_persisted_detail_navigation(self):
         app_js = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")
         new_project_js = (ROOT / "assets" / "new-project.js").read_text(encoding="utf-8")
-        self.assertIn("new-project.html?project_id=${encodeURIComponent(project.id)}", app_js)
+        self.assertIn("project-view.html?project=${encodeURIComponent(project.id)}", app_js)
         self.assertIn("get('project_id')", new_project_js)
         self.assertIn("loadReadOnlyProject(persistedProjectId)", new_project_js)
+
+    def test_confirmed_project_overview_restores_export_and_planning_controls(self):
+        page = (ROOT / "project-view.html").read_text(encoding="utf-8")
+        script = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="project-schedule-editor" hidden', page)
+        self.assertIn('id="export-ppt"', page)
+        self.assertIn("/schedule", script)
+        self.assertIn("buildProjectExportMarkdown", script)
+        self.assertIn("const canExport = persisted && project.role === 'PL'", script)
+        self.assertIn('id="simulate-schedule-minutes"', page)
+        self.assertIn('id="schedule-work-packages"', page)
+        self.assertIn("renderOverviewGantt", script)
+        self.assertNotIn("团队任务与截止日期", page)
+        self.assertIn("populateIterationProjects", (ROOT / "assets" / "new-project.js").read_text(encoding="utf-8"))
 
     def test_two_round_review_surfaces_are_wired(self):
         app_js = (ROOT / "assets" / "app.js").read_text(encoding="utf-8")
@@ -44,7 +58,7 @@ class UiLayoutContractTest(unittest.TestCase):
         self.assertIn("role-review-report-label", app_js)
         self.assertIn("textContent = planText", app_js)
         self.assertIn('class="button secondary issue-confirm-action"', app_js)
-        self.assertIn("initial-review-issue-form').hidden = !firstRound", app_js)
+        self.assertIn("initial-review-issue-form').hidden = !(firstRound || finalRound)", app_js)
 
     def test_initial_review_has_a_project_context_ai_assistant_for_team_roles(self):
         page = (ROOT / "role-review.html").read_text(encoding="utf-8")
